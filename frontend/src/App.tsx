@@ -49,7 +49,11 @@ function loadStoredSpeed(): number {
 }
 
 function loadStoredVolume(): number {
-  const value = Number(localStorage.getItem(VOLUME_STORAGE_KEY));
+  const stored = localStorage.getItem(VOLUME_STORAGE_KEY);
+  if (stored === null) {
+    return DEFAULT_VOLUME;
+  }
+  const value = Number(stored);
   return Number.isFinite(value) && value >= 0 && value <= 1 ? value : DEFAULT_VOLUME;
 }
 
