@@ -776,64 +776,37 @@ kbd {
   gap: 6px;
 }
 
-.status-text {
+/* 전체·장 진행률을 두 줄로: 라벨 | 퍼센트 | 문장 위치 */
+.progress-stats {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  column-gap: 8px;
+  row-gap: 1px;
   margin-right: 6px;
-  color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
+  line-height: 1.35;
   white-space: nowrap;
 }
 
-.progress-button {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  padding: 4px 8px;
-  border: none;
-  background: transparent;
-  color: var(--text-soft);
-  font-size: 0.85rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+.progress-row {
+  display: contents;
 }
 
 .progress-label {
   color: var(--muted);
   font-size: 0.75rem;
-  font-weight: 400;
 }
 
-.settings-panel-label {
-  font-size: 0.875rem;
+.progress-percent {
+  color: var(--text-soft);
   font-weight: 600;
+  text-align: right;
 }
 
-.segmented {
-  display: flex;
-  padding: 2px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-}
-
-.segmented button {
-  flex: 1;
-  padding: 4px 8px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
+.progress-count {
   color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.segmented button[aria-checked="true"] {
-  background: var(--accent);
-  color: #ffffff;
-  font-weight: 600;
-}
-
-.status-paused {
-  color: var(--accent-strong);
+  text-align: right;
 }
 
 /* ── 마크다운 본문 ────────────────────────── */
@@ -1099,8 +1072,7 @@ kbd {
   .save-state,
   .open-button span,
   .player-section,
-  .progress-label,
-  .status-text {
+  .progress-count {
     display: none;
   }
 
