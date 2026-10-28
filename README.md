@@ -104,7 +104,7 @@ npm run dev
 | API | 설명 |
 |-----|------|
 | `GET /api/voices?locale=ko-KR` | 음성 목록 |
-| `POST /api/tts` | 문장 → MP3 (`text`, `voice`, `rate`) |
+| `POST /api/tts` | 문장 → MP3 (`text`, `voice`, 선택 `rate`). 앱은 기본 속도로 합성하고 재생 속도는 브라우저에서 조절 |
 
 ```
 tts-reader/

@@ -41,7 +41,8 @@ export function useTtsPlayer({
   const speedRef = useRef(speed);
   const volumeRef = useRef(volume);
   const voiceRef = useRef(voice);
-  // 키에 음성·속도를 포함해 설정 변경 시 이전 오디오가 재생되지 않도록 한다.
+  // 키에 음성을 포함해 음성 변경 시 이전 오디오가 재생되지 않도록 한다.
+  // 속도는 재생할 때 playbackRate로 적용하므로 키에 넣지 않는다 (속도를 바꿔도 캐시 유지).
   const audioCacheRef = useRef<Map<string, Promise<Blob>>>(new Map());
   // 재생 루프마다 증가. 늦게 도착한 오디오가 이전 루프에서 재생되는 것을 막는다.
   const generationRef = useRef(0);
@@ -51,6 +52,9 @@ export function useTtsPlayer({
 
   useEffect(() => {
     speedRef.current = speed;
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speed;
+    }
   }, [speed]);
 
   useEffect(() => {
@@ -94,7 +98,7 @@ export function useTtsPlayer({
 
   const loadAudio = useCallback((sentence: Sentence): Promise<Blob> => {
     const cache = audioCacheRef.current;
-    const key = JSON.stringify([sentence.text, voiceRef.current, speedRef.current]);
+    const key = JSON.stringify([sentence.text, voiceRef.current]);
     const cached = cache.get(key);
     if (cached) {
       cache.delete(key);
@@ -104,10 +108,9 @@ export function useTtsPlayer({
 
     const { text } = sentence;
     const voice = voiceRef.current;
-    const speed = speedRef.current;
     // 일시적인 네트워크·TTS 서버 오류는 한 번 더 시도한다.
-    const request = synthesizeTts(text, voice, speed).catch(() =>
-      delay(RETRY_DELAY_MS).then(() => synthesizeTts(text, voice, speed)),
+    const request = synthesizeTts(text, voice).catch(() =>
+      delay(RETRY_DELAY_MS).then(() => synthesizeTts(text, voice)),
     );
     cache.set(key, request);
     request.catch(() => {
@@ -150,6 +153,7 @@ export function useTtsPlayer({
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.volume = volumeRef.current;
+      audio.playbackRate = speedRef.current;
       audio.ontimeupdate = () => {
         if (Number.isFinite(audio.duration) && audio.duration > 0) {
           setSentenceProgress(audio.currentTime / audio.duration);

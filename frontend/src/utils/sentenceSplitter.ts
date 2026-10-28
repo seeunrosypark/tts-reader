@@ -56,11 +56,6 @@ export function splitSentences(paragraph: string): string[] {
   return sentences.length > 0 ? sentences : [trimmed];
 }
 
-export function speedToRate(speed: number): string {
-  const percent = Math.round((speed - 1) * 100);
-  return `${percent >= 0 ? "+" : ""}${percent}%`;
-}
-
 export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
