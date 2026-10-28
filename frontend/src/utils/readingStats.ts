@@ -14,10 +14,27 @@ export type ReadingStats = {
   goalMinutes: number;
   /** "YYYY-MM-DD"(로컬 날짜) → 그날 기록 */
   days: Record<string, DayStats>;
+  xp: number;
+  /** 파일 이름 → 끝까지 들은 문장 번호 (오름차순) */
+  heard: Record<string, number[]>;
+  /** 파일 이름 → 장 제목 → 완료 시각 */
+  completedChapters: Record<string, Record<string, number>>;
+  /** 배지 id → 받은 시각 */
+  badges: Record<string, number>;
+  /** 3배속 이상으로 끝까지 들은 문장 수 */
+  fastSentences: number;
 };
 
 export function emptyStats(): ReadingStats {
-  return { goalMinutes: DEFAULT_GOAL_MINUTES, days: {} };
+  return {
+    goalMinutes: DEFAULT_GOAL_MINUTES,
+    days: {},
+    xp: 0,
+    heard: {},
+    completedChapters: {},
+    badges: {},
+    fastSentences: 0,
+  };
 }
 
 export function loadStats(): ReadingStats {

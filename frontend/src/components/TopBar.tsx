@@ -16,6 +16,7 @@ type TopBarProps = {
   recentFiles: RecentFile[];
   theme: Theme;
   streak: number;
+  level: number;
   onOpenStats: () => void;
   onToggleTheme: () => void;
   onToggleToc: () => void;
@@ -44,6 +45,7 @@ export function TopBar({
   recentFiles,
   theme,
   streak,
+  level,
   onOpenStats,
   onToggleTheme,
   onToggleToc,
@@ -93,8 +95,10 @@ export function TopBar({
           title={streak > 0 ? `${streak}일 연속으로 목표 달성 · 독서 기록 보기` : "독서 기록 보기"}
           onClick={onOpenStats}
         >
-          <span aria-hidden="true">🔥</span>
+          <span className="streak-flame" aria-hidden="true">🔥</span>
           {streak}
+          <span className="chip-divider" aria-hidden="true" />
+          <span className="level-text">Lv.{level}</span>
         </button>
         {recentFiles.length > 0 && (
           <div className="popover-anchor" ref={recentRef}>

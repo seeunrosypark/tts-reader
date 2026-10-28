@@ -11,10 +11,14 @@ import { ChevronIcon } from "./icons";
 
 const TOC_SECTIONS_COLLAPSED_KEY = "tts-reader-toc-sections-collapsed";
 
+export type ChapterStatus = { coverage: number; isComplete: boolean };
+
 type TableOfContentsProps = {
   toc: TocItem[];
   activeId: string | null;
   isOpen: boolean;
+  /** 장 제목의 toc id → 들은 비율과 완료 여부 */
+  chapterStatus: Record<string, ChapterStatus>;
   onNavigate: (item: TocItem) => void;
 };
 
@@ -41,6 +45,7 @@ function saveSectionsCollapsedState(collapsedIds: Set<string>) {
 type TocAccordionItemProps = {
   node: TocNode;
   activeId: string | null;
+  chapterStatus: Record<string, ChapterStatus>;
   collapsedIds: Set<string>;
   onToggle: (id: string) => void;
   onNavigate: (item: TocItem) => void;
@@ -49,6 +54,7 @@ type TocAccordionItemProps = {
 function TocAccordionItem({
   node,
   activeId,
+  chapterStatus,
   collapsedIds,
   onToggle,
   onNavigate,
@@ -56,6 +62,7 @@ function TocAccordionItem({
   const hasChildren = node.children.length > 0;
   const isSectionCollapsed = collapsedIds.has(node.item.id);
   const isActive = activeId === node.item.id;
+  const status = chapterStatus[node.item.id];
 
   return (
     <li
@@ -82,7 +89,20 @@ function TocAccordionItem({
           onClick={() => onNavigate(node.item)}
         >
           {node.item.text}
+          {status && !status.isComplete && status.coverage > 0 && (
+            <span
+              className="toc-chapter-meter"
+              title={`끝까지 들은 문장 ${Math.floor(status.coverage * 100)}%`}
+            >
+              <span style={{ width: `${status.coverage * 100}%` }} />
+            </span>
+          )}
         </button>
+        {status?.isComplete && (
+          <span className="toc-chapter-stamp" title="완료한 장" aria-label="완료">
+            ✓
+          </span>
+        )}
       </div>
 
       {hasChildren && !isSectionCollapsed && (
@@ -92,6 +112,7 @@ function TocAccordionItem({
               key={child.item.id}
               node={child}
               activeId={activeId}
+              chapterStatus={chapterStatus}
               collapsedIds={collapsedIds}
               onToggle={onToggle}
               onNavigate={onNavigate}
@@ -107,6 +128,7 @@ export function TableOfContents({
   toc,
   activeId,
   isOpen,
+  chapterStatus,
   onNavigate,
 }: TableOfContentsProps) {
   const listRef = useRef<HTMLUListElement>(null);
@@ -205,6 +227,7 @@ export function TableOfContents({
               key={node.item.id}
               node={node}
               activeId={activeId}
+              chapterStatus={chapterStatus}
               collapsedIds={collapsedSectionIds}
               onToggle={toggleSection}
               onNavigate={onNavigate}

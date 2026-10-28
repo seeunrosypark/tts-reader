@@ -1,27 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  addListening,
-  computeStreak,
-  dayKey,
-  isGoalMet,
-  loadStats,
-  saveStats,
-  type ReadingStats,
-} from "../utils/readingStats";
+import { applyListen, type ListenEvent, type Reward } from "../utils/achievements";
+import { loadStats, saveStats, type ReadingStats } from "../utils/readingStats";
 
-export type StatsEvent = { type: "goal-reached"; streak: number };
-
-/** 끝까지 들은 문장을 기록하고, 오늘 목표를 막 채운 순간을 알려 준다. */
-export function useReadingStats(onEvent: (event: StatsEvent) => void) {
+/** 끝까지 들은 문장을 기록하고, 목표 달성·장 완료·레벨 업·배지 같은 보상을 알려 준다. */
+export function useReadingStats(onReward: (reward: Reward) => void) {
   const [stats, setStats] = useState(loadStats);
   // 문장이 연달아 끝날 때 최신 값 위에 쌓도록 ref로도 들고 있는다.
   const statsRef = useRef(stats);
-  const onEventRef = useRef(onEvent);
+  const onRewardRef = useRef(onReward);
 
   useEffect(() => {
-    onEventRef.current = onEvent;
-  }, [onEvent]);
+    onRewardRef.current = onReward;
+  }, [onReward]);
 
   const update = useCallback((next: ReadingStats) => {
     statsRef.current = next;
@@ -29,19 +20,20 @@ export function useReadingStats(onEvent: (event: StatsEvent) => void) {
     setStats(next);
   }, []);
 
-  const recordListening = useCallback(
-    (seconds: number) => {
-      const now = new Date();
-      const before = statsRef.current;
-      const after = addListening(before, seconds, now);
-      update(after);
-
-      const key = dayKey(now);
-      if (!isGoalMet(before, key) && isGoalMet(after, key)) {
-        onEventRef.current({ type: "goal-reached", streak: computeStreak(after, now) });
-      }
+  /** stats를 바꾸고 보상을 내는 계산을 적용한다 (퀴즈 결과 등에서도 쓴다). */
+  const applyChange = useCallback(
+    (change: (current: ReadingStats) => { stats: ReadingStats; rewards: Reward[] }) => {
+      const { stats: next, rewards } = change(statsRef.current);
+      update(next);
+      rewards.forEach((reward) => onRewardRef.current(reward));
     },
     [update],
+  );
+
+  const recordListening = useCallback(
+    (event: Omit<ListenEvent, "now">) =>
+      applyChange((current) => applyListen(current, { ...event, now: new Date() })),
+    [applyChange],
   );
 
   const setGoalMinutes = useCallback(
@@ -49,5 +41,5 @@ export function useReadingStats(onEvent: (event: StatsEvent) => void) {
     [update],
   );
 
-  return { stats, recordListening, setGoalMinutes };
+  return { stats, recordListening, applyChange, setGoalMinutes };
 }

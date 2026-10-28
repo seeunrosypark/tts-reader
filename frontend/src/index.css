@@ -618,6 +618,36 @@ kbd {
   border-left: 1px solid var(--border);
 }
 
+.toc-chapter-meter {
+  display: block;
+  height: 3px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--hover);
+}
+
+.toc-chapter-meter span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.toc-chapter-stamp {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin: 4px 4px 0 0;
+  border-radius: 50%;
+  background: var(--success-text);
+  color: var(--surface);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 .toc-accordion-item.level-2 > .toc-row .toc-link-button {
   font-weight: 600;
 }
@@ -1052,7 +1082,7 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
-.streak-chip:not(.is-active) span {
+.streak-chip:not(.is-active) .streak-flame {
   filter: grayscale(1);
   opacity: 0.6;
 }
@@ -1060,6 +1090,17 @@ kbd {
 .streak-chip.is-active {
   border-color: var(--accent);
   color: var(--accent-strong);
+}
+
+.chip-divider {
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  background: var(--border-strong);
+}
+
+.level-text {
+  color: var(--text-soft);
 }
 
 .goal-button {
@@ -1188,6 +1229,89 @@ kbd {
   font-weight: 600;
 }
 
+.stats-level {
+  margin-bottom: 16px;
+}
+
+.stats-level-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.stats-level-head strong {
+  font-size: 1.1rem;
+}
+
+.stats-level-head span {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.xp-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--hover);
+}
+
+.xp-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+  transition: width 0.4s ease;
+}
+
+.stats-hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.badge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.badge-icon {
+  font-size: 1.6rem;
+  filter: grayscale(1);
+  opacity: 0.35;
+}
+
+.badge.is-earned {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--highlight);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.badge.is-earned .badge-icon {
+  filter: none;
+  opacity: 1;
+}
+
 .stats-goal {
   display: flex;
   align-items: center;
@@ -1198,6 +1322,10 @@ kbd {
 
 .stats-goal select {
   width: auto;
+}
+
+.stats-dialog section + section {
+  margin-top: 20px;
 }
 
 .stats-section-title {

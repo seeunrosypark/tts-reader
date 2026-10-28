@@ -14,7 +14,8 @@ import { TopBar, type SaveState } from "./components/TopBar";
 import { FileIcon } from "./components/icons";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useMediaSession } from "./hooks/useMediaSession";
-import { useReadingStats, type StatsEvent } from "./hooks/useReadingStats";
+import { useReadingStats } from "./hooks/useReadingStats";
+import { chapterCoverage, levelFromXp, type Reward } from "./utils/achievements";
 import { useTheme } from "./hooks/useTheme";
 import { useTtsPlayer } from "./hooks/useTtsPlayer";
 import { toggleBoldInMarkdown } from "./utils/markdownBold";
@@ -39,7 +40,7 @@ import {
   type OpenedMarkdown,
 } from "./utils/markdownFile";
 import { findReadingPosition, saveReadingPosition } from "./utils/readingPositions";
-import { computeReadingProgress } from "./utils/readingProgress";
+import { computeReadingProgress, listChapters } from "./utils/readingProgress";
 import { computeStreak, dayKey, goalSeconds } from "./utils/readingStats";
 import {
   addRecentFile,
@@ -115,23 +116,46 @@ export default function App() {
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
 
-  const handleStatsEvent = useCallback(
-    (event: StatsEvent) => {
-      if (event.type === "goal-reached") {
-        pushToast({
-          icon: "🎯",
-          title: "오늘의 목표 달성!",
-          detail: event.streak > 1 ? `🔥 ${event.streak}일 연속` : "내일도 이어서 연속 기록을 만들어 보세요",
-          celebrate: true,
-        });
+  const handleReward = useCallback(
+    (reward: Reward) => {
+      switch (reward.type) {
+        case "goal-reached":
+          pushToast({
+            icon: "🎯",
+            title: "오늘의 목표 달성!",
+            detail:
+              reward.streak > 1 ? `🔥 ${reward.streak}일 연속` : "내일도 이어서 연속 기록을 만들어 보세요",
+            celebrate: true,
+          });
+          break;
+        case "chapter-complete":
+          pushToast({ icon: "🏆", title: `${reward.title} 완료!`, detail: "목차에 완료 도장을 찍었어요", celebrate: true });
+          break;
+        case "book-complete":
+          pushToast({ icon: "📚", title: "완독했습니다!", detail: reward.fileName, celebrate: true });
+          break;
+        case "level-up":
+          pushToast({ icon: "⬆️", title: `레벨 ${reward.level} 달성!`, celebrate: true });
+          break;
+        case "badge":
+          pushToast({ icon: reward.badge.icon, title: `배지 획득: ${reward.badge.name}`, detail: reward.badge.description });
+          break;
       }
     },
     [pushToast],
   );
 
-  const { stats, recordListening, setGoalMinutes } = useReadingStats(handleStatsEvent);
+  const { stats, recordListening, setGoalMinutes } = useReadingStats(handleReward);
+  // 문장이 끝날 때 최신 파일·문장·목차·속도로 기록하도록 ref로 들고 있는다.
+  const listenContextRef = useRef<{
+    fileName: string | null;
+    sentences: Sentence[];
+    toc: TocItem[];
+    speed: number;
+  }>({ fileName: null, sentences: [], toc: [], speed: 1 });
   const handleSentenceListened = useCallback(
-    (_sentence: Sentence, seconds: number) => recordListening(seconds),
+    (sentence: Sentence, seconds: number) =>
+      recordListening({ ...listenContextRef.current, sentence, seconds }),
     [recordListening],
   );
   const [markdownSource, setMarkdownSource] = useState("");
@@ -430,6 +454,24 @@ export default function App() {
     onNext: skipNext,
   });
 
+  useEffect(() => {
+    listenContextRef.current = { fileName, sentences, toc, speed };
+  }, [fileName, sentences, speed, toc]);
+
+  const chapterStatus = useMemo(() => {
+    const heard = (fileName && stats.heard[fileName]) || [];
+    const completed = (fileName && stats.completedChapters[fileName]) || {};
+    return Object.fromEntries(
+      listChapters(toc).map((chapter) => [
+        chapter.id,
+        {
+          coverage: chapterCoverage(chapter, sentences, heard),
+          isComplete: Boolean(completed[chapter.title]),
+        },
+      ]),
+    );
+  }, [fileName, sentences, stats.completedChapters, stats.heard, toc]);
+
   const now = new Date();
   const todaySeconds = stats.days[dayKey(now)]?.seconds ?? 0;
   const streak = computeStreak(stats, now);
@@ -499,6 +541,7 @@ export default function App() {
         recentFiles={recentFiles}
         theme={theme}
         streak={streak}
+        level={levelFromXp(stats.xp)}
         onOpenStats={() => setIsStatsOpen(true)}
         onToggleTheme={toggleTheme}
         onToggleToc={handleToggleToc}
@@ -539,6 +582,7 @@ export default function App() {
           toc={toc}
           activeId={activeTocId}
           isOpen={isTocOpen && hasToc}
+          chapterStatus={chapterStatus}
           onNavigate={handleTocNavigate}
         />
 

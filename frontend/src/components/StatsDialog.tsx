@@ -1,6 +1,7 @@
 import { useRef } from "react";
 
 import { useDismiss } from "../hooks/useDismiss";
+import { BADGES, levelFromXp, xpForLevel } from "../utils/achievements";
 import {
   buildHeatmap,
   computeStreak,
@@ -47,6 +48,10 @@ export function StatsDialog({ stats, onClose, onGoalMinutesChange, children }: S
   const streak = computeStreak(stats, now);
   const total = totalStats(stats);
   const heatmap = buildHeatmap(stats, now, HEATMAP_WEEKS);
+  const level = levelFromXp(stats.xp);
+  const levelStart = xpForLevel(level);
+  const levelEnd = xpForLevel(level + 1);
+  const earnedCount = BADGES.filter((badge) => stats.badges[badge.id]).length;
 
   return (
     <div className="dialog-backdrop">
@@ -79,6 +84,19 @@ export function StatsDialog({ stats, onClose, onGoalMinutesChange, children }: S
               </dd>
             </div>
           </dl>
+        </section>
+
+        <section className="stats-level">
+          <div className="stats-level-head">
+            <strong>Lv.{level}</strong>
+            <span>
+              {stats.xp - levelStart} / {levelEnd - levelStart} XP
+            </span>
+          </div>
+          <div className="xp-bar" aria-hidden="true">
+            <span style={{ width: `${((stats.xp - levelStart) / (levelEnd - levelStart)) * 100}%` }} />
+          </div>
+          <p className="stats-hint">문장 1 · 오늘 목표 30 · 장 완료 50 · 완독 200 · 퀴즈 만점 40</p>
         </section>
 
         <label className="stats-goal">
@@ -117,6 +135,33 @@ export function StatsDialog({ stats, onClose, onGoalMinutesChange, children }: S
             ))}
             많음 · 목표를 채우면 진한 색
           </p>
+        </section>
+
+        <section>
+          <h3 className="stats-section-title">
+            배지 {earnedCount} / {BADGES.length}
+          </h3>
+          <ul className="badge-grid">
+            {BADGES.map((badge) => {
+              const earnedAt = stats.badges[badge.id];
+              return (
+                <li
+                  key={badge.id}
+                  className={`badge${earnedAt ? " is-earned" : ""}`}
+                  title={
+                    earnedAt
+                      ? `${badge.description} · ${new Date(earnedAt).toLocaleDateString("ko")}`
+                      : `잠김 · ${badge.description}`
+                  }
+                >
+                  <span className="badge-icon" aria-hidden="true">
+                    {badge.icon}
+                  </span>
+                  <span className="badge-name">{badge.name}</span>
+                </li>
+              );
+            })}
+          </ul>
         </section>
 
         {children}

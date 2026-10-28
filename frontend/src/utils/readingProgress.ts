@@ -18,6 +18,29 @@ export type ReadingProgress = {
   chapter: ChapterProgress | null;
 };
 
+export type Chapter = { id: string; title: string; start: number; end: number };
+
+/** 장 목록과 각 장의 [시작, 끝) 문장 번호. 하위 절은 장에 포함된다. 머리말은 장이 아니다. */
+export function listChapters(toc: TocItem[]): Chapter[] {
+  const level = getChapterLevel(toc);
+  if (level === null) {
+    return [];
+  }
+  const boundaries = toc.filter((item) => item.level <= level);
+  return boundaries.flatMap((item, i) =>
+    item.level === level
+      ? [
+          {
+            id: item.id,
+            title: item.text,
+            start: item.sentenceIndex,
+            end: boundaries[i + 1]?.sentenceIndex ?? Infinity,
+          },
+        ]
+      : [],
+  );
+}
+
 /**
  * 장으로 볼 제목 단계. "# 책 제목 / ## 1장" 구조가 흔하므로 ##가 있으면 ##,
  * 없으면 가장 얕은 제목 단계를 장으로 본다.
