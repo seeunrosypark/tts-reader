@@ -25,6 +25,8 @@ npm run dev
 
 브라우저에서 **http://localhost:5173** 을 엽니다.
 
+단위 테스트: `npm test` (vitest)
+
 <details>
 <summary>터미널 2개로 나눠 실행하기</summary>
 
