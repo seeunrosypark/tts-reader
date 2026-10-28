@@ -259,7 +259,7 @@ uvicorn main:app --reload --port 8000
 | 프론트엔드 | React + Vite + TypeScript | React 19, Vite 6, TS 5.7 | UI, 하이라이트, 플레이어 |
 | 마크다운 | marked + DOMPurify | marked 15, DOMPurify 3 | `.md` → HTML, XSS 방어 |
 | 백엔드 | FastAPI + uvicorn | FastAPI 0.115+, uvicorn 0.32+ | REST API, 파일 I/O |
-| TTS | edge-tts | 7.0+ | Neural 음성 mp3 합성 |
+| TTS | edge-tts | 7.3.1+ | Neural 음성 mp3 합성 |
 | 오디오 | HTMLAudioElement | 브라우저 내장 | 문장별 mp3 재생·동기화 |
 | 검증 | Pydantic | 2.0+ | API 요청/응답 스키마 |
 
@@ -303,7 +303,7 @@ Vite dev server가 `/api/*`를 FastAPI(`localhost:8000`)로 **proxy**합니다.
 # backend/requirements.txt
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
-edge-tts>=7.0.0
+edge-tts>=7.3.1
 pydantic>=2.0.0
 ```
 
