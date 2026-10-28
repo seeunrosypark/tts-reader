@@ -23,7 +23,6 @@ function trySpawn(index) {
   const proc = spawn(python, args, {
     cwd: backendDir,
     stdio: "inherit",
-    shell: isWin,
   });
 
   proc.on("error", () => trySpawn(index + 1));

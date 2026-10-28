@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 
 import type { VoiceInfo } from "../api/ttsClient";
+import { useDismiss } from "../hooks/useDismiss";
 
 type SettingsPanelProps = {
   isOpen: boolean;
@@ -28,42 +29,18 @@ export function SettingsPanel({
   onVoiceChange,
 }: SettingsPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    function handleClickOutside(event: MouseEvent) {
-      const target = event.target as Node;
-      if (anchorRef.current?.contains(target) || panelRef.current?.contains(target)) {
-        return;
-      }
-      onClose();
-    }
-
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [anchorRef, isOpen, onClose]);
+  useDismiss([anchorRef, panelRef], isOpen, onClose);
 
   if (!isOpen) {
     return null;
   }
 
   return (
-    <div ref={panelRef} className="settings-panel" role="dialog" aria-label="TTS 설정">
+    <div ref={panelRef} className="popover popover-up settings-panel" role="dialog" aria-label="TTS 설정">
       <div className="settings-panel-row">
-        <label htmlFor="speed-slider">속도: {speed.toFixed(1)}x</label>
+        <label htmlFor="speed-slider">
+          속도 <output>{speed.toFixed(1)}x</output>
+        </label>
         <input
           id="speed-slider"
           type="range"
@@ -75,7 +52,9 @@ export function SettingsPanel({
         />
       </div>
       <div className="settings-panel-row">
-        <label htmlFor="volume-slider">볼륨: {Math.round(volume * 100)}%</label>
+        <label htmlFor="volume-slider">
+          볼륨 <output>{Math.round(volume * 100)}%</output>
+        </label>
         <input
           id="volume-slider"
           type="range"

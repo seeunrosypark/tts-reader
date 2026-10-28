@@ -1,7 +1,18 @@
-import { useRef, useState, type CSSProperties } from "react";
+import { useCallback, useRef, useState, type CSSProperties } from "react";
 
 import type { VoiceInfo } from "../api/ttsClient";
 import type { PlayerStatus } from "../hooks/useTtsPlayer";
+import type { TocItem } from "../utils/markdownToSentences";
+import {
+  MuteIcon,
+  NextIcon,
+  PauseIcon,
+  PlayIcon,
+  PrevIcon,
+  SettingsIcon,
+  StopIcon,
+  VolumeIcon,
+} from "./icons";
 import { SettingsPanel } from "./SettingsPanel";
 
 type PlayerControlsProps = {
@@ -14,9 +25,8 @@ type PlayerControlsProps = {
   currentPlayablePosition: number;
   overallProgress: number;
   isMuted: boolean;
-  onPlay: (startSentenceIndex?: number) => void;
-  onPause: () => void;
-  onResume: () => void;
+  activeHeading: TocItem | null;
+  onPlayToggle: () => void;
   onStop: () => void;
   onSkipPrevious: () => void;
   onSkipNext: () => void;
@@ -25,7 +35,6 @@ type PlayerControlsProps = {
   onVoiceChange: (voice: string) => void;
   onSeek: (fraction: number) => void;
   onToggleMute: () => void;
-  resolvePlayStartIndex?: () => number | undefined;
 };
 
 export function PlayerControls({
@@ -38,9 +47,8 @@ export function PlayerControls({
   currentPlayablePosition,
   overallProgress,
   isMuted,
-  onPlay,
-  onPause,
-  onResume,
+  activeHeading,
+  onPlayToggle,
   onStop,
   onSkipPrevious,
   onSkipNext,
@@ -49,94 +57,26 @@ export function PlayerControls({
   onVoiceChange,
   onSeek,
   onToggleMute,
-  resolvePlayStartIndex,
 }: PlayerControlsProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [dragValue, setDragValue] = useState<number | null>(null);
   const seekValue = dragValue ?? Math.round(overallProgress * 1000);
   const settingsRef = useRef<HTMLDivElement>(null);
+  const closeSettings = useCallback(() => setIsSettingsOpen(false), []);
   const isPlaying = status === "playing";
   const isPaused = status === "paused";
+  const isEmpty = playableCount === 0;
+  const position = isEmpty ? 0 : Math.min(currentPlayablePosition, playableCount);
 
-  const handlePlayToggle = () => {
-    if (isPlaying) {
-      onPause();
-      return;
+  const commitSeek = () => {
+    if (dragValue !== null) {
+      onSeek(dragValue / 1000);
     }
-    if (isPaused) {
-      onResume();
-      return;
-    }
-    onPlay(resolvePlayStartIndex?.());
+    setDragValue(null);
   };
 
   return (
-    <section className="player-controls">
-      <div className="control-row player-main-row">
-        <div className="player-buttons">
-          <button
-            type="button"
-            onClick={handlePlayToggle}
-            disabled={playableCount === 0}
-          >
-            {isPlaying ? "일시정지" : isPaused ? "계속 재생" : "재생"}
-          </button>
-          <button type="button" onClick={onStop} disabled={status === "idle"}>
-            정지
-          </button>
-          <button
-            type="button"
-            onClick={onSkipPrevious}
-            disabled={playableCount === 0}
-          >
-            이전 문장
-          </button>
-          <button type="button" onClick={onSkipNext} disabled={playableCount === 0}>
-            다음 문장
-          </button>
-          <span className="status-text">
-            문장{" "}
-            {playableCount === 0
-              ? 0
-              : Math.min(currentPlayablePosition, playableCount)}{" "}
-            / {playableCount}
-          </span>
-        </div>
-
-        <div className="settings-wrapper" ref={settingsRef}>
-          <button
-            type="button"
-            className="mute-button"
-            aria-pressed={isMuted}
-            title={isMuted ? "음소거 해제" : "음소거"}
-            onClick={onToggleMute}
-          >
-            {isMuted ? "🔇" : "🔊"}
-          </button>
-          <button
-            type="button"
-            className="settings-button"
-            aria-haspopup="dialog"
-            aria-expanded={isSettingsOpen}
-            onClick={() => setIsSettingsOpen((open) => !open)}
-          >
-            설정
-          </button>
-          <SettingsPanel
-            isOpen={isSettingsOpen}
-            speed={speed}
-            volume={volume}
-            voice={voice}
-            voices={voices}
-            anchorRef={settingsRef}
-            onClose={() => setIsSettingsOpen(false)}
-            onSpeedChange={onSpeedChange}
-            onVolumeChange={onVolumeChange}
-            onVoiceChange={onVoiceChange}
-          />
-        </div>
-      </div>
-
+    <footer className="player-bar">
       <input
         type="range"
         className="seek-bar"
@@ -144,24 +84,116 @@ export function PlayerControls({
         max={1000}
         step={1}
         value={seekValue}
-        disabled={playableCount === 0}
+        disabled={isEmpty}
         aria-label="읽기 진행률"
-        aria-valuetext={`${Math.min(currentPlayablePosition, playableCount)} / ${playableCount}`}
+        aria-valuetext={`${position} / ${playableCount}`}
         style={{ "--seek-progress": `${seekValue / 10}%` } as CSSProperties}
         onChange={(event) => setDragValue(Number(event.target.value))}
-        onPointerUp={() => {
-          if (dragValue !== null) {
-            onSeek(dragValue / 1000);
-          }
-          setDragValue(null);
-        }}
-        onKeyUp={() => {
-          if (dragValue !== null) {
-            onSeek(dragValue / 1000);
-          }
-          setDragValue(null);
-        }}
+        onPointerUp={commitSeek}
+        onKeyUp={commitSeek}
       />
-    </section>
+
+      <div className="player-inner">
+        <div className="player-section" aria-live="polite">
+          {activeHeading ? (
+            <>
+              <span className="player-section-level">H{activeHeading.level}</span>
+              <span className="player-section-text" title={activeHeading.text}>
+                {activeHeading.text}
+              </span>
+            </>
+          ) : (
+            <span className="player-section-empty">
+              {isEmpty ? "파일을 열면 여기서 재생합니다" : "재생할 준비가 됐습니다"}
+            </span>
+          )}
+        </div>
+
+        <div className="player-buttons">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="이전 문장"
+            title="이전 문장"
+            onClick={onSkipPrevious}
+            disabled={isEmpty}
+          >
+            <PrevIcon />
+          </button>
+          <button
+            type="button"
+            className="play-button"
+            aria-label={isPlaying ? "일시정지" : "재생"}
+            title={isPlaying ? "일시정지 (Space)" : "재생 (Space)"}
+            onClick={onPlayToggle}
+            disabled={isEmpty}
+          >
+            {isPlaying ? <PauseIcon /> : <PlayIcon />}
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="다음 문장"
+            title="다음 문장"
+            onClick={onSkipNext}
+            disabled={isEmpty}
+          >
+            <NextIcon />
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="정지"
+            title="정지"
+            onClick={onStop}
+            disabled={status === "idle"}
+          >
+            <StopIcon />
+          </button>
+        </div>
+
+        <div className="player-extra">
+          <span className="status-text" title="현재 문장 / 전체 문장">
+            {position} / {playableCount}
+            {isPaused && <span className="status-paused"> · 일시정지</span>}
+          </span>
+          <button
+            type="button"
+            className="icon-button"
+            aria-pressed={isMuted}
+            aria-label={isMuted ? "음소거 해제" : "음소거"}
+            title={isMuted ? "음소거 해제" : "음소거"}
+            onClick={onToggleMute}
+          >
+            {isMuted ? <MuteIcon /> : <VolumeIcon />}
+          </button>
+          <div className="popover-anchor" ref={settingsRef}>
+            <button
+              type="button"
+              className="speed-button"
+              aria-haspopup="dialog"
+              aria-expanded={isSettingsOpen}
+              title="속도 · 볼륨 · 음성"
+              onClick={() => setIsSettingsOpen((open) => !open)}
+            >
+              <SettingsIcon />
+              <span>{speed.toFixed(1)}x</span>
+            </button>
+            <SettingsPanel
+              isOpen={isSettingsOpen}
+              speed={speed}
+              volume={volume}
+              voice={voice}
+              voices={voices}
+              anchorRef={settingsRef}
+              onClose={closeSettings}
+              onSpeedChange={onSpeedChange}
+              onVolumeChange={onVolumeChange}
+              onVoiceChange={onVoiceChange}
+            />
+          </div>
+        </div>
+      </div>
+    </footer>
   );
 }

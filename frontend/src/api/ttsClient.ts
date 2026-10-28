@@ -7,25 +7,6 @@ export type VoiceInfo = {
   locale: string;
 };
 
-export type BookFile = {
-  name: string;
-  path: string;
-};
-
-export type ReaderConfig = {
-  bookDir: string;
-  defaultFile: string | null;
-  isCustomBookDir: boolean;
-};
-
-export async function fetchReaderConfig(): Promise<ReaderConfig> {
-  const response = await fetch("/api/config");
-  if (!response.ok) {
-    throw new Error("Failed to fetch reader config");
-  }
-  return response.json();
-}
-
 export async function fetchVoices(locale?: string): Promise<VoiceInfo[]> {
   const query = locale ? `?locale=${encodeURIComponent(locale)}` : "";
   const response = await fetch(`/api/voices${query}`);
@@ -55,36 +36,4 @@ export async function synthesizeTts(
   }
 
   return response.blob();
-}
-
-export async function fetchBookFiles(): Promise<BookFile[]> {
-  const response = await fetch("/api/files");
-  if (!response.ok) {
-    throw new Error("Failed to fetch files");
-  }
-  return response.json();
-}
-
-export async function fetchBookFileContent(filename: string): Promise<string> {
-  const response = await fetch(`/api/files/${encodeURIComponent(filename)}`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch file content");
-  }
-  const data = (await response.json()) as { content: string };
-  return data.content;
-}
-
-export async function saveBookFileContent(
-  filename: string,
-  content: string,
-): Promise<void> {
-  const response = await fetch(`/api/files/${encodeURIComponent(filename)}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to save file content");
-  }
 }

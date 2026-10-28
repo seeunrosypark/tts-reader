@@ -8,18 +8,14 @@ import {
   type TocNode,
 } from "../utils/tocTree";
 
-const TOC_SIDEBAR_COLLAPSED_KEY = "tts-reader-toc-collapsed";
 const TOC_SECTIONS_COLLAPSED_KEY = "tts-reader-toc-sections-collapsed";
 
 type TableOfContentsProps = {
   toc: TocItem[];
   activeId: string | null;
+  isOpen: boolean;
   onNavigate: (item: TocItem) => void;
 };
-
-function loadSidebarCollapsedState(): boolean {
-  return localStorage.getItem(TOC_SIDEBAR_COLLAPSED_KEY) === "true";
-}
 
 function loadSectionsCollapsedState(): Set<string> {
   try {
@@ -109,12 +105,10 @@ function TocAccordionItem({
 export function TableOfContents({
   toc,
   activeId,
+  isOpen,
   onNavigate,
 }: TableOfContentsProps) {
   const listRef = useRef<HTMLUListElement>(null);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
-    loadSidebarCollapsedState,
-  );
   const [collapsedSectionIds, setCollapsedSectionIds] = useState(
     loadSectionsCollapsedState,
   );
@@ -146,7 +140,7 @@ export function TableOfContents({
   }, [activeId, ancestorIds]);
 
   useEffect(() => {
-    if (!activeId || !listRef.current || isSidebarCollapsed) {
+    if (!activeId || !listRef.current || !isOpen) {
       return;
     }
 
@@ -154,15 +148,7 @@ export function TableOfContents({
       `[data-toc-id="${activeId}"]`,
     );
     activeElement?.scrollIntoView({ block: "nearest" });
-  }, [activeId, isSidebarCollapsed, collapsedSectionIds]);
-
-  const toggleSidebar = () => {
-    setIsSidebarCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem(TOC_SIDEBAR_COLLAPSED_KEY, String(next));
-      return next;
-    });
-  };
+  }, [activeId, isOpen, collapsedSectionIds]);
 
   const toggleSection = (id: string) => {
     setCollapsedSectionIds((prev) => {
@@ -188,53 +174,41 @@ export function TableOfContents({
     saveSectionsCollapsedState(allExpandable);
   };
 
+  if (!isOpen) {
+    return null;
+  }
+
   return (
-    <nav
-      className={`toc-sidebar${isSidebarCollapsed ? " collapsed" : ""}`}
-      aria-label="목차"
-    >
+    <nav className="toc-sidebar" aria-label="목차">
       <div className="toc-header">
-        {!isSidebarCollapsed && <h2 className="toc-title">목차</h2>}
-        <button
-          type="button"
-          className="toc-toggle-button"
-          aria-expanded={!isSidebarCollapsed}
-          aria-label={isSidebarCollapsed ? "목차 펼치기" : "목차 접기"}
-          onClick={toggleSidebar}
-        >
-          {isSidebarCollapsed ? "목차 ▶" : "◀ 접기"}
-        </button>
+        <h2 className="toc-title">목차</h2>
+        {toc.length > 0 && (
+          <div className="toc-section-actions">
+            <button type="button" onClick={expandAllSections}>
+              모두 펼치기
+            </button>
+            <button type="button" onClick={collapseAllSections}>
+              모두 접기
+            </button>
+          </div>
+        )}
       </div>
 
-      {!isSidebarCollapsed && (
-        <>
-          {toc.length === 0 ? (
-            <p className="toc-empty">목차가 없습니다.</p>
-          ) : (
-            <>
-              <div className="toc-section-actions">
-                <button type="button" onClick={expandAllSections}>
-                  전체 펼치기
-                </button>
-                <button type="button" onClick={collapseAllSections}>
-                  전체 접기
-                </button>
-              </div>
-              <ul ref={listRef} className="toc-list">
-                {tocTree.map((node) => (
-                  <TocAccordionItem
-                    key={node.item.id}
-                    node={node}
-                    activeId={activeId}
-                    collapsedIds={collapsedSectionIds}
-                    onToggle={toggleSection}
-                    onNavigate={onNavigate}
-                  />
-                ))}
-              </ul>
-            </>
-          )}
-        </>
+      {toc.length === 0 ? (
+        <p className="toc-empty">목차가 없습니다.</p>
+      ) : (
+        <ul ref={listRef} className="toc-list">
+          {tocTree.map((node) => (
+            <TocAccordionItem
+              key={node.item.id}
+              node={node}
+              activeId={activeId}
+              collapsedIds={collapsedSectionIds}
+              onToggle={toggleSection}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </ul>
       )}
     </nav>
   );

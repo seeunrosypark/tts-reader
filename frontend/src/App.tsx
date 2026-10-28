@@ -1,22 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  fetchBookFileContent,
-  fetchBookFiles,
-  fetchReaderConfig,
-  fetchVoices,
-  saveBookFileContent,
-  type BookFile,
-  type VoiceInfo,
-} from "./api/ttsClient";
-import { FileSelector } from "./components/FileSelector";
+import { fetchVoices, type VoiceInfo } from "./api/ttsClient";
 import {
   MarkdownViewer,
   type MarkdownViewerHandle,
 } from "./components/MarkdownViewer";
 import { PlayerControls } from "./components/PlayerControls";
-import { StickySectionHeading } from "./components/StickySectionHeading";
 import { TableOfContents } from "./components/TableOfContents";
+import { TopBar, type SaveState } from "./components/TopBar";
+import { FileIcon } from "./components/icons";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useTtsPlayer } from "./hooks/useTtsPlayer";
 import { toggleBoldInMarkdown } from "./utils/markdownBold";
@@ -30,11 +22,22 @@ import {
   findPlainRangeForSelection,
   type MarkdownPlainMapper,
 } from "./utils/markdownPlainMapper";
+import {
+  isMarkdownFileName,
+  pickMarkdownFile,
+  readDroppedMarkdown,
+  readPlainFile,
+  supportsFileHandles,
+  writeMarkdownFile,
+  type OpenedMarkdown,
+} from "./utils/markdownFile";
 import type { Sentence } from "./utils/sentenceSplitter";
 
 const VOICE_STORAGE_KEY = "tts-reader-voice";
 const SPEED_STORAGE_KEY = "tts-reader-speed";
 const VOLUME_STORAGE_KEY = "tts-reader-volume";
+const TOC_COLLAPSED_STORAGE_KEY = "tts-reader-toc-collapsed";
+const NARROW_SCREEN_QUERY = "(max-width: 900px)";
 const DEFAULT_VOICE = "ko-KR-SunHiNeural";
 const DEFAULT_SPEED = 2.0;
 const DEFAULT_VOLUME = 0.5;
@@ -57,13 +60,23 @@ function loadStoredVolume(): number {
   return Number.isFinite(value) && value >= 0 && value <= 1 ? value : DEFAULT_VOLUME;
 }
 
+function isNarrowScreen(): boolean {
+  return window.matchMedia(NARROW_SCREEN_QUERY).matches;
+}
+
+function loadTocOpen(): boolean {
+  return !isNarrowScreen() && localStorage.getItem(TOC_COLLAPSED_STORAGE_KEY) !== "true";
+}
+
 export default function App() {
   const viewerRef = useRef<MarkdownViewerHandle>(null);
   const plainMapperRef = useRef<MarkdownPlainMapper | null>(null);
-  const [files, setFiles] = useState<BookFile[]>([]);
-  const [bookDir, setBookDir] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [isServerFile, setIsServerFile] = useState(true);
+  const fileHandleRef = useRef<FileSystemFileHandle | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>(null);
+  const [isTocOpen, setIsTocOpen] = useState(loadTocOpen);
+  const [isDragging, setIsDragging] = useState(false);
   const [markdownSource, setMarkdownSource] = useState("");
   const [html, setHtml] = useState("");
   const [sentences, setSentences] = useState<Sentence[]>([]);
@@ -128,21 +141,53 @@ export default function App() {
   );
 
   const loadMarkdown = useCallback(
-    (markdown: string, filename: string | null, fromServer: boolean) => {
+    (opened: OpenedMarkdown) => {
       stop();
-      plainMapperRef.current = createMarkdownPlainMapper(markdown);
-      const parsed = parseLocalMarkdown(markdown);
-      setMarkdownSource(markdown);
+      plainMapperRef.current = createMarkdownPlainMapper(opened.content);
+      const parsed = parseLocalMarkdown(opened.content);
+      fileHandleRef.current = opened.handle;
+      setMarkdownSource(opened.content);
       setHtml(parsed.html);
       setSentences(parsed.sentences);
       setToc(parsed.toc);
-      setSelectedFile(filename);
-      setIsServerFile(fromServer);
+      setFileName(opened.name);
+      setSaveState(null);
       setHighlightedIndex(null);
       setError(null);
+      window.scrollTo({ top: 0 });
     },
     [stop],
   );
+
+  const showError = useCallback(
+    (fallback: string) => (caught: unknown) => {
+      setError(caught instanceof Error ? caught.message : fallback);
+    },
+    [],
+  );
+
+  const handleOpenFile = useCallback(() => {
+    if (!supportsFileHandles()) {
+      fileInputRef.current?.click();
+      return;
+    }
+    pickMarkdownFile()
+      .then((opened) => opened && loadMarkdown(opened))
+      .catch(showError("파일을 열지 못했습니다."));
+  }, [loadMarkdown, showError]);
+
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    setIsDragging(false);
+    const pending = readDroppedMarkdown(event.dataTransfer);
+    if (!pending) {
+      setError(".md 파일만 열 수 있습니다.");
+      return;
+    }
+    pending
+      .then((opened) => opened && loadMarkdown(opened))
+      .catch(showError("파일을 열지 못했습니다."));
+  };
 
   const handlePlay = useCallback(
     (startSentenceIndex?: number) => {
@@ -206,27 +251,21 @@ export default function App() {
     }
 
     const preserveHighlight = highlightedIndex;
+    const handle = fileHandleRef.current;
 
     try {
-      if (isServerFile && selectedFile) {
-        await saveBookFileContent(selectedFile, nextMarkdown);
+      if (handle) {
+        setSaveState("saving");
+        await writeMarkdownFile(handle, nextMarkdown);
       }
       applyParsedMarkdown(nextMarkdown, preserveHighlight);
+      setSaveState(handle ? "saved" : "memory-only");
       window.getSelection()?.removeAllRanges();
     } catch (saveError) {
-      setError(
-        saveError instanceof Error
-          ? saveError.message
-          : "마크다운 저장에 실패했습니다.",
-      );
+      setSaveState(null);
+      showError("원본 파일 저장에 실패했습니다.")(saveError);
     }
-  }, [
-    applyParsedMarkdown,
-    highlightedIndex,
-    isServerFile,
-    markdownSource,
-    selectedFile,
-  ]);
+  }, [applyParsedMarkdown, highlightedIndex, markdownSource, showError]);
 
   useKeyboardShortcuts({
     onPlayToggle: handlePlayToggle,
@@ -236,35 +275,10 @@ export default function App() {
   });
 
   useEffect(() => {
-    async function bootstrap() {
-      try {
-        const [bookFiles, voiceList, config] = await Promise.all([
-          fetchBookFiles(),
-          fetchVoices("ko-KR"),
-          fetchReaderConfig(),
-        ]);
-        setFiles(bookFiles);
-        setBookDir(config.bookDir);
-        setVoices(voiceList);
-
-        const startupFile = config.defaultFile
-          ? bookFiles.find((file) => file.name === config.defaultFile)
-          : null;
-        if (startupFile) {
-          const content = await fetchBookFileContent(startupFile.name);
-          loadMarkdown(content, startupFile.name, true);
-        }
-      } catch (bootstrapError) {
-        setError(
-          bootstrapError instanceof Error
-            ? bootstrapError.message
-            : "초기화에 실패했습니다.",
-        );
-      }
-    }
-
-    void bootstrap();
-  }, [loadMarkdown]);
+    fetchVoices("ko-KR")
+      .then(setVoices)
+      .catch(showError("음성 목록을 불러오지 못했습니다. 백엔드가 실행 중인지 확인하세요."));
+  }, [showError]);
 
   const activeTocId = useMemo(
     () => findActiveTocItem(toc, highlightedIndex),
@@ -275,28 +289,6 @@ export default function App() {
     () => toc.find((item) => item.id === activeTocId) ?? null,
     [activeTocId, toc],
   );
-
-  const handleSelectPreset = async (filename: string) => {
-    try {
-      const content = await fetchBookFileContent(filename);
-      loadMarkdown(content, filename, true);
-    } catch (loadError) {
-      setError(
-        loadError instanceof Error ? loadError.message : "파일을 불러오지 못했습니다.",
-      );
-    }
-  };
-
-  const handleSelectLocalFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      loadMarkdown(String(reader.result ?? ""), file.name, false);
-    };
-    reader.onerror = () => {
-      setError("로컬 파일을 읽지 못했습니다.");
-    };
-    reader.readAsText(file, "utf-8");
-  };
 
   const handleVoiceChange = (nextVoice: string) => {
     setVoice(nextVoice);
@@ -325,64 +317,90 @@ export default function App() {
   const handleTocNavigate = (item: TocItem) => {
     viewerRef.current?.scrollToHeading(item.id);
     jumpToSentence(item.sentenceIndex);
+    if (isNarrowScreen()) {
+      setIsTocOpen(false);
+    }
   };
 
-  return (
-    <div className="app">
-      <header className="app-header">
-        <h1>Markdown TTS Reader</h1>
-        <p>
-          마크다운 원고를 문장 단위로 하이라이트하며 읽어줍니다.{" "}
-          <span className="shortcut-hint">
-            문장 클릭: 그 문장부터 재생 · Space: 재생/일시정지 · 드래그 선택 후 Ctrl+B: **bold** 토글
-          </span>
-        </p>
-      </header>
+  const handleToggleToc = () => {
+    setIsTocOpen((open) => {
+      if (!isNarrowScreen()) {
+        localStorage.setItem(TOC_COLLAPSED_STORAGE_KEY, String(open));
+      }
+      return !open;
+    });
+  };
 
-      <FileSelector
-        files={files}
-        bookDir={bookDir}
-        selectedFile={selectedFile}
-        onSelectPreset={handleSelectPreset}
-        onSelectLocalFile={handleSelectLocalFile}
+  const hasToc = toc.length > 0;
+
+  return (
+    <div
+      className="app"
+      onDragOver={(event) => {
+        event.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setIsDragging(false);
+        }
+      }}
+      onDrop={handleDrop}
+    >
+      <TopBar
+        fileName={fileName}
+        saveState={saveState}
+        isTocOpen={isTocOpen && hasToc}
+        hasToc={hasToc}
+        onToggleToc={handleToggleToc}
+        onOpenFile={handleOpenFile}
+      />
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".md,.markdown,text/markdown"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) {
+            return;
+          }
+          if (!isMarkdownFileName(file.name)) {
+            setError(".md 파일만 열 수 있습니다.");
+            return;
+          }
+          readPlainFile(file)
+            .then(loadMarkdown)
+            .catch(showError("파일을 읽지 못했습니다."));
+        }}
       />
 
       <div className="app-layout">
+        {hasToc && isTocOpen && (
+          <div
+            className="toc-backdrop"
+            aria-hidden="true"
+            onClick={() => setIsTocOpen(false)}
+          />
+        )}
         <TableOfContents
           toc={toc}
           activeId={activeTocId}
+          isOpen={isTocOpen && hasToc}
           onNavigate={handleTocNavigate}
         />
 
         <main className="app-main">
-          <div className="reader-sticky-header">
-            <PlayerControls
-              status={status}
-              speed={speed}
-              volume={volume}
-              voice={voice}
-              voices={voices}
-              playableCount={playerPlayableCount}
-              currentPlayablePosition={currentPlayablePosition}
-              overallProgress={overallProgress}
-              isMuted={isMuted}
-              onPlay={handlePlay}
-              onPause={pause}
-              onResume={resume}
-              onStop={stop}
-              onSkipPrevious={skipPrevious}
-              onSkipNext={skipNext}
-              onSpeedChange={handleSpeedChange}
-              onVolumeChange={handleVolumeChange}
-              onVoiceChange={handleVoiceChange}
-              onSeek={seekToFraction}
-              onToggleMute={() => setIsMuted((muted) => !muted)}
-              resolvePlayStartIndex={resolvePlayStartIndex}
-            />
-            <StickySectionHeading heading={activeHeading} />
-          </div>
-
-          {error && <p className="error-message">{error}</p>}
+          {error && (
+            <p className="error-message" role="alert">
+              <span>{error}</span>
+              <button type="button" aria-label="닫기" onClick={() => setError(null)}>
+                ×
+              </button>
+            </p>
+          )}
 
           {html ? (
             <MarkdownViewer
@@ -392,10 +410,45 @@ export default function App() {
               onSentenceClick={handleSentenceClick}
             />
           ) : (
-            <p className="placeholder">마크다운 파일을 선택하세요.</p>
+            <section className="empty-state">
+              <FileIcon />
+              <h2>마크다운 파일을 열어 주세요</h2>
+              <p>파일을 이 창에 끌어다 놓거나 아래 버튼을 누르세요.</p>
+              <button type="button" className="primary-button" onClick={handleOpenFile}>
+                파일 열기
+              </button>
+            </section>
           )}
         </main>
       </div>
+
+      <PlayerControls
+        status={status}
+        speed={speed}
+        volume={volume}
+        voice={voice}
+        voices={voices}
+        playableCount={playerPlayableCount}
+        currentPlayablePosition={currentPlayablePosition}
+        overallProgress={overallProgress}
+        isMuted={isMuted}
+        activeHeading={activeHeading}
+        onPlayToggle={handlePlayToggle}
+        onStop={stop}
+        onSkipPrevious={skipPrevious}
+        onSkipNext={skipNext}
+        onSpeedChange={handleSpeedChange}
+        onVolumeChange={handleVolumeChange}
+        onVoiceChange={handleVoiceChange}
+        onSeek={seekToFraction}
+        onToggleMute={() => setIsMuted((muted) => !muted)}
+      />
+
+      {isDragging && (
+        <div className="drop-overlay" aria-hidden="true">
+          <p>여기에 .md 파일을 놓으세요</p>
+        </div>
+      )}
     </div>
   );
 }
