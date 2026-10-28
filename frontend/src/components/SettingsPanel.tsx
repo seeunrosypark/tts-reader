@@ -2,6 +2,7 @@ import { useRef } from "react";
 
 import type { VoiceInfo } from "../api/ttsClient";
 import { useDismiss } from "../hooks/useDismiss";
+import type { ProgressMode } from "../utils/readingProgress";
 
 type SettingsPanelProps = {
   isOpen: boolean;
@@ -14,7 +15,14 @@ type SettingsPanelProps = {
   onSpeedChange: (speed: number) => void;
   onVolumeChange: (volume: number) => void;
   onVoiceChange: (voice: string) => void;
+  progressMode: ProgressMode;
+  onProgressModeChange: (mode: ProgressMode) => void;
 };
+
+const PROGRESS_MODES: [ProgressMode, string][] = [
+  ["overall", "전체"],
+  ["chapter", "장별"],
+];
 
 export function SettingsPanel({
   isOpen,
@@ -27,6 +35,8 @@ export function SettingsPanel({
   onSpeedChange,
   onVolumeChange,
   onVoiceChange,
+  progressMode,
+  onProgressModeChange,
 }: SettingsPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   useDismiss([anchorRef, panelRef], isOpen, onClose);
@@ -78,6 +88,24 @@ export function SettingsPanel({
             </option>
           ))}
         </select>
+      </div>
+      <div className="settings-panel-row">
+        <span className="settings-panel-label" id="progress-mode-label">
+          진행률 표시
+        </span>
+        <div className="segmented" role="radiogroup" aria-labelledby="progress-mode-label">
+          {PROGRESS_MODES.map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              role="radio"
+              aria-checked={progressMode === mode}
+              onClick={() => onProgressModeChange(mode)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

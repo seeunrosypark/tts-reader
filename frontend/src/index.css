@@ -784,6 +784,54 @@ kbd {
   white-space: nowrap;
 }
 
+.progress-button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.progress-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.settings-panel-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.segmented {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.segmented button {
+  flex: 1;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.segmented button[aria-checked="true"] {
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+
 .status-paused {
   color: var(--accent-strong);
 }
@@ -1051,6 +1099,7 @@ kbd {
   .save-state,
   .open-button span,
   .player-section,
+  .progress-label,
   .status-text {
     display: none;
   }

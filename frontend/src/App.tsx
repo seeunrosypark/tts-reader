@@ -36,6 +36,7 @@ import {
   type OpenedMarkdown,
 } from "./utils/markdownFile";
 import { findReadingPosition, saveReadingPosition } from "./utils/readingPositions";
+import { computeReadingProgress, type ProgressMode } from "./utils/readingProgress";
 import {
   addRecentFile,
   loadRecentFiles,
@@ -48,6 +49,7 @@ const VOICE_STORAGE_KEY = "tts-reader-voice";
 const SPEED_STORAGE_KEY = "tts-reader-speed";
 const VOLUME_STORAGE_KEY = "tts-reader-volume";
 const TOC_COLLAPSED_STORAGE_KEY = "tts-reader-toc-collapsed";
+const PROGRESS_MODE_STORAGE_KEY = "tts-reader-progress-mode";
 const NARROW_SCREEN_QUERY = "(max-width: 900px)";
 const DEFAULT_VOICE = "ko-KR-SunHiNeural";
 const DEFAULT_SPEED = 2.0;
@@ -69,6 +71,10 @@ function loadStoredVolume(): number {
   }
   const value = Number(stored);
   return Number.isFinite(value) && value >= 0 && value <= 1 ? value : DEFAULT_VOLUME;
+}
+
+function loadProgressMode(): ProgressMode {
+  return localStorage.getItem(PROGRESS_MODE_STORAGE_KEY) === "chapter" ? "chapter" : "overall";
 }
 
 function isNarrowScreen(): boolean {
@@ -94,6 +100,7 @@ export default function App() {
   const [isTocOpen, setIsTocOpen] = useState(loadTocOpen);
   const [isDragging, setIsDragging] = useState(false);
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
+  const [progressMode, setProgressMode] = useState(loadProgressMode);
   const { theme, toggleTheme } = useTheme();
   const [markdownSource, setMarkdownSource] = useState("");
   const [html, setHtml] = useState("");
@@ -114,7 +121,9 @@ export default function App() {
 
   const {
     status,
+    currentIndex,
     currentPlayablePosition,
+    sentenceProgress,
     overallProgress,
     play,
     pause,
@@ -384,6 +393,16 @@ export default function App() {
     onNext: skipNext,
   });
 
+  const readingProgress = useMemo(
+    () => computeReadingProgress(progressMode, sentences, toc, currentIndex, sentenceProgress),
+    [currentIndex, progressMode, sentenceProgress, sentences, toc],
+  );
+
+  const handleProgressModeChange = (nextMode: ProgressMode) => {
+    setProgressMode(nextMode);
+    localStorage.setItem(PROGRESS_MODE_STORAGE_KEY, nextMode);
+  };
+
   const handleSpeedChange = (nextSpeed: number) => {
     setSpeed(nextSpeed);
     localStorage.setItem(SPEED_STORAGE_KEY, String(nextSpeed));
@@ -530,6 +549,10 @@ export default function App() {
         playableCount={playerPlayableCount}
         currentPlayablePosition={currentPlayablePosition}
         overallProgress={overallProgress}
+        readingProgress={readingProgress.progress}
+        progressChapterTitle={readingProgress.chapterTitle}
+        progressMode={progressMode}
+        onProgressModeChange={handleProgressModeChange}
         isMuted={isMuted}
         activeHeading={activeHeading}
         onPlayToggle={handlePlayToggle}

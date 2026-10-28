@@ -366,6 +366,7 @@ export function useTtsPlayer({
     status,
     currentIndex,
     currentPlayablePosition,
+    sentenceProgress,
     overallProgress,
     play,
     pause,

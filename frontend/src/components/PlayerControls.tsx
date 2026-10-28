@@ -3,6 +3,7 @@ import { useCallback, useRef, useState, type CSSProperties } from "react";
 import type { VoiceInfo } from "../api/ttsClient";
 import type { PlayerStatus } from "../hooks/useTtsPlayer";
 import type { TocItem } from "../utils/markdownToSentences";
+import type { ProgressMode } from "../utils/readingProgress";
 import {
   MuteIcon,
   NextIcon,
@@ -24,6 +25,9 @@ type PlayerControlsProps = {
   playableCount: number;
   currentPlayablePosition: number;
   overallProgress: number;
+  readingProgress: number;
+  progressChapterTitle: string | null;
+  progressMode: ProgressMode;
   isMuted: boolean;
   activeHeading: TocItem | null;
   onPlayToggle: () => void;
@@ -35,6 +39,7 @@ type PlayerControlsProps = {
   onVoiceChange: (voice: string) => void;
   onSeek: (fraction: number) => void;
   onToggleMute: () => void;
+  onProgressModeChange: (mode: ProgressMode) => void;
 };
 
 export function PlayerControls({
@@ -46,6 +51,9 @@ export function PlayerControls({
   playableCount,
   currentPlayablePosition,
   overallProgress,
+  readingProgress,
+  progressChapterTitle,
+  progressMode,
   isMuted,
   activeHeading,
   onPlayToggle,
@@ -57,6 +65,7 @@ export function PlayerControls({
   onVoiceChange,
   onSeek,
   onToggleMute,
+  onProgressModeChange,
 }: PlayerControlsProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [dragValue, setDragValue] = useState<number | null>(null);
@@ -67,6 +76,12 @@ export function PlayerControls({
   const isPaused = status === "paused";
   const isEmpty = playableCount === 0;
   const position = isEmpty ? 0 : Math.min(currentPlayablePosition, playableCount);
+  const progressPercent = isEmpty ? 0 : Math.floor(readingProgress * 100);
+  const progressLabel = progressMode === "chapter" ? "장" : "전체";
+  const progressTitle =
+    progressMode === "chapter"
+      ? `${progressChapterTitle ?? "현재 장"} 진행률 · 클릭하면 전체 진행률`
+      : "전체 진행률 · 클릭하면 장별 진행률";
 
   const commitSeek = () => {
     if (dragValue !== null) {
@@ -153,6 +168,17 @@ export function PlayerControls({
         </div>
 
         <div className="player-extra">
+          <button
+            type="button"
+            className="progress-button"
+            title={progressTitle}
+            aria-label={`${progressLabel} 진행률 ${progressPercent}%`}
+            disabled={isEmpty}
+            onClick={() => onProgressModeChange(progressMode === "chapter" ? "overall" : "chapter")}
+          >
+            <span className="progress-label">{progressLabel}</span>
+            {progressPercent}%
+          </button>
           <span className="status-text" title="현재 문장 / 전체 문장">
             {position} / {playableCount}
             {isPaused && <span className="status-paused"> · 일시정지</span>}
@@ -190,6 +216,8 @@ export function PlayerControls({
               onSpeedChange={onSpeedChange}
               onVolumeChange={onVolumeChange}
               onVoiceChange={onVoiceChange}
+              progressMode={progressMode}
+              onProgressModeChange={onProgressModeChange}
             />
           </div>
         </div>
