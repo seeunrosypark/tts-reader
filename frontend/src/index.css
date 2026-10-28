@@ -764,6 +764,26 @@ kbd {
   text-transform: uppercase;
 }
 
+.markdown-viewer pre.mermaid-error[data-lang]::before {
+  color: #fca5a5;
+  text-transform: none;
+}
+
+.markdown-viewer .mermaid-diagram {
+  margin: 1.5rem 0;
+  padding: 16px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  text-align: center;
+}
+
+.markdown-viewer .mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .markdown-viewer pre code {
   background: none;
   padding: 0;

@@ -6,6 +6,8 @@ import {
   forwardRef,
 } from "react";
 
+import { NON_PROSE_SELECTOR, renderMermaidBlocks } from "../utils/renderMermaid";
+
 export type SelectionPlainRange = {
   start: number;
   end: number;
@@ -64,7 +66,7 @@ function isSelectionInCodeBlock(range: Range): boolean {
       ? range.commonAncestorContainer.parentElement
       : (range.commonAncestorContainer as Element);
 
-  return Boolean(node?.closest("pre, code"));
+  return Boolean(node?.closest(NON_PROSE_SELECTOR));
 }
 
 function getPlainTextOffset(
@@ -75,7 +77,7 @@ function getPlainTextOffset(
   let offset = 0;
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
-      if (node.parentElement?.closest("pre, code")) {
+      if (node.parentElement?.closest(NON_PROSE_SELECTOR)) {
         return NodeFilter.FILTER_REJECT;
       }
       return NodeFilter.FILTER_ACCEPT;
@@ -157,7 +159,7 @@ export const MarkdownViewer = forwardRef<MarkdownViewerHandle, MarkdownViewerPro
           return;
         }
         const target = event.target as Element | null;
-        if (!target || target.closest("a, pre, code")) {
+        if (!target || target.closest(`a, ${NON_PROSE_SELECTOR}`)) {
           return;
         }
         const sentenceElement = target.closest(
@@ -184,6 +186,14 @@ export const MarkdownViewer = forwardRef<MarkdownViewerHandle, MarkdownViewerPro
       }
       container.innerHTML = html;
       reapplyHighlight(container, highlightedIndexRef.current);
+
+      let isStale = false;
+      renderMermaidBlocks(container, () => isStale).catch((error) => {
+        console.error("mermaid 렌더링 실패", error);
+      });
+      return () => {
+        isStale = true;
+      };
     }, [html]);
 
     useLayoutEffect(() => {
