@@ -26,26 +26,42 @@ type MarkdownViewerProps = {
   onSentenceClick?: (index: number) => void;
 };
 
+// 사용자가 직접 스크롤한 뒤 이 시간 동안은 하이라이트를 따라가지 않는다.
+const FOLLOW_PAUSE_AFTER_USER_SCROLL_MS = 5000;
+const SCROLL_KEYS = new Set(["PageUp", "PageDown", "ArrowUp", "ArrowDown", "Home", "End"]);
+
+function readCssPixels(name: string): number {
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
+}
+
+/** 상단 바와 하단 플레이어에 가려지지 않는 영역 밖에 있으면 화면 가운데로 스크롤한다. */
+function followHighlight(target: Element): void {
+  const rect = target.getBoundingClientRect();
+  const visibleTop = readCssPixels("--top-bar-height");
+  const visibleBottom = window.innerHeight - readCssPixels("--player-height");
+  if (rect.top >= visibleTop && rect.bottom <= visibleBottom) {
+    return;
+  }
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 function reapplyHighlight(
   container: HTMLElement,
   highlightedIndex: number | null,
-): void {
+): Element | null {
   container.querySelectorAll(".sentence.active").forEach((element) => {
     element.classList.remove("active");
   });
 
   if (highlightedIndex === null) {
-    return;
+    return null;
   }
 
   const target = container.querySelector(
     `.sentence[data-index="${highlightedIndex}"]`,
   );
-  if (!target) {
-    return;
-  }
-
-  target.classList.add("active");
+  target?.classList.add("active");
+  return target;
 }
 
 function isSelectionInContainer(
@@ -142,6 +158,27 @@ export const MarkdownViewer = forwardRef<MarkdownViewerHandle, MarkdownViewerPro
     const containerRef = useRef<HTMLElement>(null);
     const highlightedIndexRef = useRef(highlightedIndex);
     const onSentenceClickRef = useRef(onSentenceClick);
+    // 이 시각 전까지는 하이라이트 자동 스크롤을 쉰다 (직접 스크롤, 목차 이동).
+    const followPausedUntilRef = useRef(0);
+
+    useEffect(() => {
+      const pauseFollow = () => {
+        followPausedUntilRef.current = Date.now() + FOLLOW_PAUSE_AFTER_USER_SCROLL_MS;
+      };
+      const handleKey = (event: KeyboardEvent) => {
+        if (SCROLL_KEYS.has(event.key)) {
+          pauseFollow();
+        }
+      };
+      window.addEventListener("wheel", pauseFollow, { passive: true });
+      window.addEventListener("touchmove", pauseFollow, { passive: true });
+      window.addEventListener("keydown", handleKey);
+      return () => {
+        window.removeEventListener("wheel", pauseFollow);
+        window.removeEventListener("touchmove", pauseFollow);
+        window.removeEventListener("keydown", handleKey);
+      };
+    }, []);
 
     useEffect(() => {
       onSentenceClickRef.current = onSentenceClick;
@@ -201,7 +238,10 @@ export const MarkdownViewer = forwardRef<MarkdownViewerHandle, MarkdownViewerPro
       if (!container) {
         return;
       }
-      reapplyHighlight(container, highlightedIndex);
+      const target = reapplyHighlight(container, highlightedIndex);
+      if (target && Date.now() >= followPausedUntilRef.current) {
+        followHighlight(target);
+      }
     }, [highlightedIndex]);
 
     useImperativeHandle(ref, () => ({
@@ -211,6 +251,8 @@ export const MarkdownViewer = forwardRef<MarkdownViewerHandle, MarkdownViewerPro
           return;
         }
         const target = container.querySelector(`#${CSS.escape(id)}`);
+        // 제목으로 스크롤하는 동안 첫 문장 하이라이트가 스크롤을 덮어쓰지 않게 한다.
+        followPausedUntilRef.current = Date.now() + 1000;
         target?.scrollIntoView({ behavior: "smooth", block: "start" });
       },
       getSelectionPlainRange() {
