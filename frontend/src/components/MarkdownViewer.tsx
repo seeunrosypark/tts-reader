@@ -21,6 +21,7 @@ export type MarkdownViewerHandle = {
 type MarkdownViewerProps = {
   html: string;
   highlightedIndex: number | null;
+  onSentenceClick?: (index: number) => void;
 };
 
 function reapplyHighlight(
@@ -135,9 +136,42 @@ function getSentenceIndexFromRange(container: HTMLElement, range: Range): number
 }
 
 export const MarkdownViewer = forwardRef<MarkdownViewerHandle, MarkdownViewerProps>(
-  function MarkdownViewer({ html, highlightedIndex }, ref) {
+  function MarkdownViewer({ html, highlightedIndex, onSentenceClick }, ref) {
     const containerRef = useRef<HTMLElement>(null);
     const highlightedIndexRef = useRef(highlightedIndex);
+    const onSentenceClickRef = useRef(onSentenceClick);
+
+    useEffect(() => {
+      onSentenceClickRef.current = onSentenceClick;
+    }, [onSentenceClick]);
+
+    useEffect(() => {
+      const container = containerRef.current;
+      if (!container) {
+        return;
+      }
+
+      const handleClick = (event: MouseEvent) => {
+        // 드래그 선택은 Ctrl+B·선택 재생용이므로 이동으로 처리하지 않는다.
+        if (!window.getSelection()?.isCollapsed) {
+          return;
+        }
+        const target = event.target as Element | null;
+        if (!target || target.closest("a, pre, code")) {
+          return;
+        }
+        const sentenceElement = target.closest(
+          '.sentence[data-index]:not([data-skip="true"])',
+        );
+        const index = Number(sentenceElement?.getAttribute("data-index"));
+        if (sentenceElement && Number.isFinite(index)) {
+          onSentenceClickRef.current?.(index);
+        }
+      };
+
+      container.addEventListener("click", handleClick);
+      return () => container.removeEventListener("click", handleClick);
+    }, []);
 
     useEffect(() => {
       highlightedIndexRef.current = highlightedIndex;

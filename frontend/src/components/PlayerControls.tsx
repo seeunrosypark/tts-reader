@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 
 import type { VoiceInfo } from "../api/ttsClient";
 import type { PlayerStatus } from "../hooks/useTtsPlayer";
@@ -12,6 +12,8 @@ type PlayerControlsProps = {
   voices: VoiceInfo[];
   playableCount: number;
   currentPlayablePosition: number;
+  overallProgress: number;
+  isMuted: boolean;
   onPlay: (startSentenceIndex?: number) => void;
   onPause: () => void;
   onResume: () => void;
@@ -21,6 +23,8 @@ type PlayerControlsProps = {
   onSpeedChange: (speed: number) => void;
   onVolumeChange: (volume: number) => void;
   onVoiceChange: (voice: string) => void;
+  onSeek: (fraction: number) => void;
+  onToggleMute: () => void;
   resolvePlayStartIndex?: () => number | undefined;
 };
 
@@ -32,6 +36,8 @@ export function PlayerControls({
   voices,
   playableCount,
   currentPlayablePosition,
+  overallProgress,
+  isMuted,
   onPlay,
   onPause,
   onResume,
@@ -41,9 +47,13 @@ export function PlayerControls({
   onSpeedChange,
   onVolumeChange,
   onVoiceChange,
+  onSeek,
+  onToggleMute,
   resolvePlayStartIndex,
 }: PlayerControlsProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [dragValue, setDragValue] = useState<number | null>(null);
+  const seekValue = dragValue ?? Math.round(overallProgress * 1000);
   const settingsRef = useRef<HTMLDivElement>(null);
   const isPlaying = status === "playing";
   const isPaused = status === "paused";
@@ -96,6 +106,15 @@ export function PlayerControls({
         <div className="settings-wrapper" ref={settingsRef}>
           <button
             type="button"
+            className="mute-button"
+            aria-pressed={isMuted}
+            title={isMuted ? "음소거 해제" : "음소거"}
+            onClick={onToggleMute}
+          >
+            {isMuted ? "🔇" : "🔊"}
+          </button>
+          <button
+            type="button"
             className="settings-button"
             aria-haspopup="dialog"
             aria-expanded={isSettingsOpen}
@@ -117,6 +136,32 @@ export function PlayerControls({
           />
         </div>
       </div>
+
+      <input
+        type="range"
+        className="seek-bar"
+        min={0}
+        max={1000}
+        step={1}
+        value={seekValue}
+        disabled={playableCount === 0}
+        aria-label="읽기 진행률"
+        aria-valuetext={`${Math.min(currentPlayablePosition, playableCount)} / ${playableCount}`}
+        style={{ "--seek-progress": `${seekValue / 10}%` } as CSSProperties}
+        onChange={(event) => setDragValue(Number(event.target.value))}
+        onPointerUp={() => {
+          if (dragValue !== null) {
+            onSeek(dragValue / 1000);
+          }
+          setDragValue(null);
+        }}
+        onKeyUp={() => {
+          if (dragValue !== null) {
+            onSeek(dragValue / 1000);
+          }
+          setDragValue(null);
+        }}
+      />
     </section>
   );
 }

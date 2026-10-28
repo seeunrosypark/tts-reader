@@ -5,6 +5,9 @@ import type { Sentence } from "../utils/sentenceSplitter";
 
 export type PlayerStatus = "idle" | "playing" | "paused";
 
+const AUDIO_CACHE_LIMIT = 50;
+const PREFETCH_AHEAD = 2;
+
 type UseTtsPlayerOptions = {
   sentences: Sentence[];
   voice: string;
@@ -22,6 +25,7 @@ export function useTtsPlayer({
 }: UseTtsPlayerOptions) {
   const [status, setStatus] = useState<PlayerStatus>("idle");
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [sentenceProgress, setSentenceProgress] = useState(0);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const statusRef = useRef<PlayerStatus>("idle");
@@ -29,8 +33,10 @@ export function useTtsPlayer({
   const speedRef = useRef(speed);
   const volumeRef = useRef(volume);
   const voiceRef = useRef(voice);
-  const prefetchRef = useRef<Map<number, Blob>>(new Map());
-  const abortRef = useRef(false);
+  // 키에 음성·속도를 포함해 설정 변경 시 이전 오디오가 재생되지 않도록 한다.
+  const audioCacheRef = useRef<Map<string, Promise<Blob>>>(new Map());
+  // 재생 루프마다 증가. 늦게 도착한 오디오가 이전 루프에서 재생되는 것을 막는다.
+  const generationRef = useRef(0);
 
   const playableSentences = sentences.filter((sentence) => !sentence.skip);
 
@@ -57,65 +63,80 @@ export function useTtsPlayer({
     }
   }, []);
 
+  const moveTo = useCallback(
+    (sentenceIndex: number) => {
+      currentIndexRef.current = sentenceIndex;
+      setCurrentIndex(sentenceIndex);
+      setSentenceProgress(0);
+      onHighlightChange(sentenceIndex);
+    },
+    [onHighlightChange],
+  );
+
   const getPlayableIndex = useCallback(
     (sentenceIndex: number) =>
       playableSentences.findIndex((sentence) => sentence.index === sentenceIndex),
     [playableSentences],
   );
 
-  const prefetchSentence = useCallback(
-    async (sentenceIndex: number) => {
-      if (prefetchRef.current.has(sentenceIndex)) {
-        return;
-      }
+  const loadAudio = useCallback((sentence: Sentence): Promise<Blob> => {
+    const cache = audioCacheRef.current;
+    const key = JSON.stringify([sentence.text, voiceRef.current, speedRef.current]);
+    const cached = cache.get(key);
+    if (cached) {
+      cache.delete(key);
+      cache.set(key, cached);
+      return cached;
+    }
 
-      const sentence = sentences.find((item) => item.index === sentenceIndex);
-      if (!sentence || sentence.skip) {
-        return;
+    const request = synthesizeTts(sentence.text, voiceRef.current, speedRef.current);
+    cache.set(key, request);
+    request.catch(() => {
+      if (cache.get(key) === request) {
+        cache.delete(key);
       }
-
-      const blob = await synthesizeTts(
-        sentence.text,
-        voiceRef.current,
-        speedRef.current,
-      );
-      prefetchRef.current.set(sentenceIndex, blob);
-    },
-    [sentences],
-  );
+    });
+    if (cache.size > AUDIO_CACHE_LIMIT) {
+      const oldest = cache.keys().next().value;
+      if (oldest !== undefined) {
+        cache.delete(oldest);
+      }
+    }
+    return request;
+  }, []);
 
   const playSentence = useCallback(
-    async (sentenceIndex: number): Promise<boolean> => {
+    async (sentenceIndex: number, generation: number): Promise<boolean> => {
       const sentence = sentences.find((item) => item.index === sentenceIndex);
       if (!sentence || sentence.skip) {
         return false;
       }
 
-      let blob = prefetchRef.current.get(sentenceIndex);
-      if (!blob) {
-        blob = await synthesizeTts(
-          sentence.text,
-          voiceRef.current,
-          speedRef.current,
-        );
-      } else {
-        prefetchRef.current.delete(sentenceIndex);
+      moveTo(sentenceIndex);
+      const current = loadAudio(sentence);
+      const playableIndex = getPlayableIndex(sentenceIndex);
+      for (let ahead = 1; ahead <= PREFETCH_AHEAD; ahead++) {
+        const next = playableSentences[playableIndex + ahead];
+        if (next) {
+          void loadAudio(next);
+        }
+      }
+
+      const blob = await current;
+      if (generation !== generationRef.current) {
+        return false;
       }
 
       cleanupAudio();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.volume = volumeRef.current;
+      audio.ontimeupdate = () => {
+        if (Number.isFinite(audio.duration) && audio.duration > 0) {
+          setSentenceProgress(audio.currentTime / audio.duration);
+        }
+      };
       audioRef.current = audio;
-
-      setCurrentIndex(sentenceIndex);
-      currentIndexRef.current = sentenceIndex;
-      onHighlightChange(sentenceIndex);
-
-      const nextPlayable = playableSentences[getPlayableIndex(sentenceIndex) + 1];
-      if (nextPlayable) {
-        void prefetchSentence(nextPlayable.index);
-      }
 
       await new Promise<void>((resolve, reject) => {
         audio.onended = () => resolve();
@@ -127,47 +148,42 @@ export function useTtsPlayer({
       audioRef.current = null;
       return true;
     },
-    [
-      cleanupAudio,
-      getPlayableIndex,
-      onHighlightChange,
-      playableSentences,
-      prefetchSentence,
-      sentences,
-    ],
+    [cleanupAudio, getPlayableIndex, loadAudio, moveTo, playableSentences, sentences],
   );
 
-  const runPlaybackLoop = useCallback(
-    async (startSentenceIndex?: number) => {
-      abortRef.current = false;
+  const finishPlayback = useCallback(() => {
+    statusRef.current = "idle";
+    setStatus("idle");
+    currentIndexRef.current = 0;
+    setCurrentIndex(0);
+    setSentenceProgress(0);
+    onHighlightChange(null);
+  }, [onHighlightChange]);
 
-      let startAt = startSentenceIndex ?? currentIndexRef.current;
-      if (statusRef.current === "idle" && startSentenceIndex === undefined) {
-        const first = playableSentences[0];
-        startAt = first?.index ?? 0;
-        currentIndexRef.current = startAt;
+  const runPlaybackLoop = useCallback(async () => {
+    const generation = ++generationRef.current;
+
+    let startPlayableIndex = getPlayableIndex(currentIndexRef.current);
+    if (startPlayableIndex < 0) {
+      startPlayableIndex = Math.max(
+        playableSentences.findIndex(
+          (sentence) => sentence.index >= currentIndexRef.current,
+        ),
+        0,
+      );
+    }
+
+    for (let i = startPlayableIndex; i < playableSentences.length; i++) {
+      if (generation !== generationRef.current || statusRef.current !== "playing") {
+        return;
       }
+      await playSentence(playableSentences[i].index, generation);
+    }
 
-      let startPlayableIndex = getPlayableIndex(startAt);
-      if (startPlayableIndex < 0) {
-        startPlayableIndex = 0;
-      }
-
-      for (let i = startPlayableIndex; i < playableSentences.length; i++) {
-        if (abortRef.current || statusRef.current !== "playing") {
-          return;
-        }
-
-        const sentence = playableSentences[i];
-        await playSentence(sentence.index);
-      }
-
-      statusRef.current = "idle";
-      setStatus("idle");
-      onHighlightChange(null);
-    },
-    [getPlayableIndex, onHighlightChange, playableSentences, playSentence],
-  );
+    if (generation === generationRef.current) {
+      finishPlayback();
+    }
+  }, [finishPlayback, getPlayableIndex, playableSentences, playSentence]);
 
   const play = useCallback(
     (startSentenceIndex?: number) => {
@@ -175,24 +191,21 @@ export function useTtsPlayer({
         return;
       }
 
-      prefetchRef.current.clear();
-
       if (startSentenceIndex !== undefined) {
         const target = playableSentences.find(
           (sentence) => sentence.index >= startSentenceIndex,
         );
         if (target) {
-          currentIndexRef.current = target.index;
-          setCurrentIndex(target.index);
-          onHighlightChange(target.index);
+          moveTo(target.index);
         }
       }
 
+      cleanupAudio();
       statusRef.current = "playing";
       setStatus("playing");
-      void runPlaybackLoop(startSentenceIndex);
+      void runPlaybackLoop();
     },
-    [onHighlightChange, playableSentences, runPlaybackLoop],
+    [cleanupAudio, moveTo, playableSentences, runPlaybackLoop],
   );
 
   const pause = useCallback(() => {
@@ -200,22 +213,17 @@ export function useTtsPlayer({
       return;
     }
 
-    abortRef.current = true;
+    generationRef.current++;
     statusRef.current = "paused";
     setStatus("paused");
     audioRef.current?.pause();
   }, []);
 
   const stop = useCallback(() => {
-    abortRef.current = true;
-    statusRef.current = "idle";
-    setStatus("idle");
-    currentIndexRef.current = 0;
-    setCurrentIndex(0);
-    prefetchRef.current.clear();
+    generationRef.current++;
     cleanupAudio();
-    onHighlightChange(null);
-  }, [cleanupAudio, onHighlightChange]);
+    finishPlayback();
+  }, [cleanupAudio, finishPlayback]);
 
   const resume = useCallback(() => {
     if (statusRef.current !== "paused") {
@@ -225,114 +233,96 @@ export function useTtsPlayer({
     if (audioRef.current) {
       statusRef.current = "playing";
       setStatus("playing");
-      abortRef.current = false;
-      void audioRef.current.play();
-      audioRef.current.onended = () => {
+      const audio = audioRef.current;
+      void audio.play();
+      audio.onended = () => {
         const nextPlayable = playableSentences[getPlayableIndex(currentIndexRef.current) + 1];
         if (nextPlayable) {
-          void runPlaybackLoop(nextPlayable.index);
+          currentIndexRef.current = nextPlayable.index;
+          void runPlaybackLoop();
         } else {
-          statusRef.current = "idle";
-          setStatus("idle");
-          onHighlightChange(null);
+          finishPlayback();
         }
       };
       return;
     }
 
     play();
-  }, [getPlayableIndex, onHighlightChange, play, playableSentences, runPlaybackLoop]);
+  }, [finishPlayback, getPlayableIndex, play, playableSentences, runPlaybackLoop]);
 
-  const skipPrevious = useCallback(() => {
-    const playableIndex = getPlayableIndex(currentIndexRef.current);
-    if (playableIndex <= 0) {
-      return;
-    }
-
-    abortRef.current = true;
-    cleanupAudio();
-    const previous = playableSentences[playableIndex - 1];
-    currentIndexRef.current = previous.index;
-    setCurrentIndex(previous.index);
-    onHighlightChange(previous.index);
-
-    if (statusRef.current === "playing") {
-      void runPlaybackLoop();
-    }
-  }, [
-    cleanupAudio,
-    getPlayableIndex,
-    onHighlightChange,
-    playableSentences,
-    runPlaybackLoop,
-  ]);
-
-  const skipNext = useCallback(() => {
-    const playableIndex = getPlayableIndex(currentIndexRef.current);
-    if (playableIndex >= playableSentences.length - 1) {
-      return;
-    }
-
-    abortRef.current = true;
-    cleanupAudio();
-    const next = playableSentences[playableIndex + 1];
-    currentIndexRef.current = next.index;
-    setCurrentIndex(next.index);
-    onHighlightChange(next.index);
-
-    if (statusRef.current === "playing") {
-      void runPlaybackLoop();
-    }
-  }, [
-    cleanupAudio,
-    getPlayableIndex,
-    onHighlightChange,
-    playableSentences,
-    runPlaybackLoop,
-  ]);
-
-  const jumpToSentence = useCallback(
-    (sentenceIndex: number) => {
-      const target = playableSentences.find(
-        (sentence) => sentence.index >= sentenceIndex,
-      );
+  const jumpToPlayable = useCallback(
+    (playableIndex: number) => {
+      const target = playableSentences[playableIndex];
       if (!target) {
         return;
       }
 
-      abortRef.current = true;
+      generationRef.current++;
       cleanupAudio();
-      prefetchRef.current.clear();
-      currentIndexRef.current = target.index;
-      setCurrentIndex(target.index);
-      onHighlightChange(target.index);
+      moveTo(target.index);
 
       if (statusRef.current === "playing") {
-        statusRef.current = "playing";
-        void runPlaybackLoop(target.index);
+        void runPlaybackLoop();
       }
     },
-    [
-      cleanupAudio,
-      onHighlightChange,
-      playableSentences,
-      runPlaybackLoop,
-    ],
+    [cleanupAudio, moveTo, playableSentences, runPlaybackLoop],
+  );
+
+  const skipPrevious = useCallback(() => {
+    const playableIndex = getPlayableIndex(currentIndexRef.current);
+    if (playableIndex > 0) {
+      jumpToPlayable(playableIndex - 1);
+    }
+  }, [getPlayableIndex, jumpToPlayable]);
+
+  const skipNext = useCallback(() => {
+    const playableIndex = getPlayableIndex(currentIndexRef.current);
+    if (playableIndex < playableSentences.length - 1) {
+      jumpToPlayable(playableIndex + 1);
+    }
+  }, [getPlayableIndex, jumpToPlayable, playableSentences.length]);
+
+  const jumpToSentence = useCallback(
+    (sentenceIndex: number) => {
+      const playableIndex = playableSentences.findIndex(
+        (sentence) => sentence.index >= sentenceIndex,
+      );
+      if (playableIndex >= 0) {
+        jumpToPlayable(playableIndex);
+      }
+    },
+    [jumpToPlayable, playableSentences],
+  );
+
+  const seekToFraction = useCallback(
+    (fraction: number) => {
+      const count = playableSentences.length;
+      if (count === 0) {
+        return;
+      }
+      jumpToPlayable(Math.min(Math.floor(fraction * count), count - 1));
+    },
+    [jumpToPlayable, playableSentences.length],
   );
 
   useEffect(() => {
     return () => {
-      abortRef.current = true;
+      generationRef.current++;
       cleanupAudio();
     };
   }, [cleanupAudio]);
 
   const currentPlayablePosition = Math.max(getPlayableIndex(currentIndex), 0) + 1;
+  const overallProgress =
+    playableSentences.length === 0
+      ? 0
+      : (currentPlayablePosition - 1 + sentenceProgress) / playableSentences.length;
 
   return {
     status,
     currentIndex,
     currentPlayablePosition,
+    overallProgress,
     play,
     pause,
     resume,
@@ -340,6 +330,7 @@ export function useTtsPlayer({
     skipPrevious,
     skipNext,
     jumpToSentence,
+    seekToFraction,
     playableCount: playableSentences.length,
   };
 }

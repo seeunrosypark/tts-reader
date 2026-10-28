@@ -73,11 +73,13 @@ export default function App() {
   const [voice, setVoice] = useState(loadStoredVoice);
   const [speed, setSpeed] = useState(loadStoredSpeed);
   const [volume, setVolume] = useState(loadStoredVolume);
+  const [isMuted, setIsMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const {
     status,
     currentPlayablePosition,
+    overallProgress,
     play,
     pause,
     resume,
@@ -85,12 +87,13 @@ export default function App() {
     skipPrevious,
     skipNext,
     jumpToSentence,
+    seekToFraction,
     playableCount: playerPlayableCount,
   } = useTtsPlayer({
     sentences,
     voice,
     speed,
-    volume,
+    volume: isMuted ? 0 : volume,
     onHighlightChange: setHighlightedIndex,
   });
 
@@ -307,7 +310,16 @@ export default function App() {
 
   const handleVolumeChange = (nextVolume: number) => {
     setVolume(nextVolume);
+    setIsMuted(false);
     localStorage.setItem(VOLUME_STORAGE_KEY, String(nextVolume));
+  };
+
+  const handleSentenceClick = (sentenceIndex: number) => {
+    if (status === "playing") {
+      jumpToSentence(sentenceIndex);
+      return;
+    }
+    handlePlay(sentenceIndex);
   };
 
   const handleTocNavigate = (item: TocItem) => {
@@ -322,7 +334,7 @@ export default function App() {
         <p>
           마크다운 원고를 문장 단위로 하이라이트하며 읽어줍니다.{" "}
           <span className="shortcut-hint">
-            Space: 재생/일시정지 · 드래그 선택 후 Ctrl+B: **bold** 토글
+            문장 클릭: 그 문장부터 재생 · Space: 재생/일시정지 · 드래그 선택 후 Ctrl+B: **bold** 토글
           </span>
         </p>
       </header>
@@ -352,6 +364,8 @@ export default function App() {
               voices={voices}
               playableCount={playerPlayableCount}
               currentPlayablePosition={currentPlayablePosition}
+              overallProgress={overallProgress}
+              isMuted={isMuted}
               onPlay={handlePlay}
               onPause={pause}
               onResume={resume}
@@ -361,6 +375,8 @@ export default function App() {
               onSpeedChange={handleSpeedChange}
               onVolumeChange={handleVolumeChange}
               onVoiceChange={handleVoiceChange}
+              onSeek={seekToFraction}
+              onToggleMute={() => setIsMuted((muted) => !muted)}
               resolvePlayStartIndex={resolvePlayStartIndex}
             />
             <StickySectionHeading heading={activeHeading} />
@@ -373,6 +389,7 @@ export default function App() {
               ref={viewerRef}
               html={html}
               highlightedIndex={highlightedIndex}
+              onSentenceClick={handleSentenceClick}
             />
           ) : (
             <p className="placeholder">마크다운 파일을 선택하세요.</p>
