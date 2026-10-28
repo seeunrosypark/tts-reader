@@ -125,11 +125,22 @@ export function findPlainRangeForSelection(
   const searchWindowStart = Math.max(0, hintStart - 200);
   const searchWindowEnd = Math.min(plainText.length, hintStart + 200);
   const windowText = plainText.slice(searchWindowStart, searchWindowEnd);
-  const localIndex = windowText.indexOf(normalizedSelected);
 
-  if (localIndex !== -1) {
+  // 근처에 같은 단어가 여러 번 나올 수 있으므로 선택 위치에 가장 가까운 것을 고른다.
+  let nearest = -1;
+  for (
+    let localIndex = windowText.indexOf(normalizedSelected);
+    localIndex !== -1;
+    localIndex = windowText.indexOf(normalizedSelected, localIndex + 1)
+  ) {
     const start = searchWindowStart + localIndex;
-    return { start, end: start + normalizedSelected.length };
+    if (nearest === -1 || Math.abs(start - hintStart) < Math.abs(nearest - hintStart)) {
+      nearest = start;
+    }
+  }
+
+  if (nearest !== -1) {
+    return { start: nearest, end: nearest + normalizedSelected.length };
   }
 
   const globalIndex = plainText.indexOf(normalizedSelected);
