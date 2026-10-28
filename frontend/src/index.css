@@ -254,6 +254,58 @@ kbd {
   font-weight: 400;
 }
 
+.popover-title {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.recent-popover {
+  padding: 12px 8px 8px;
+}
+
+.recent-popover .popover-title {
+  padding: 0 8px;
+}
+
+.recent-file-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent-file-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+
+.recent-file-list .icon {
+  width: 16px;
+  height: 16px;
+  color: #94a3b8;
+}
+
+.recent-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-file-time {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 /* ── 본문 레이아웃 ────────────────────────── */
 
 .app-layout {
@@ -320,6 +372,20 @@ kbd {
 
 .empty-state p {
   margin: 0 0 20px;
+}
+
+.empty-state-recent {
+  width: min(360px, 100%);
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  color: #1f2937;
+  text-align: left;
+}
+
+.empty-state .recent-file-list .icon {
+  width: 16px;
+  height: 16px;
 }
 
 .drop-overlay {

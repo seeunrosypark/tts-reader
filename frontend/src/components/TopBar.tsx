@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 
 import { useDismiss } from "../hooks/useDismiss";
-import { FileIcon, HelpIcon, TocIcon } from "./icons";
+import type { RecentFile } from "../utils/recentFiles";
+import { ClockIcon, FileIcon, HelpIcon, TocIcon } from "./icons";
+import { RecentFileList } from "./RecentFileList";
 
 export type SaveState = "saving" | "saved" | "memory-only" | null;
 
@@ -10,8 +12,10 @@ type TopBarProps = {
   saveState: SaveState;
   isTocOpen: boolean;
   hasToc: boolean;
+  recentFiles: RecentFile[];
   onToggleToc: () => void;
   onOpenFile: () => void;
+  onOpenRecent: (file: RecentFile) => void;
 };
 
 const SAVE_STATE_LABEL: Record<Exclude<SaveState, null>, string> = {
@@ -32,13 +36,19 @@ export function TopBar({
   saveState,
   isTocOpen,
   hasToc,
+  recentFiles,
   onToggleToc,
   onOpenFile,
+  onOpenRecent,
 }: TopBarProps) {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isRecentOpen, setIsRecentOpen] = useState(false);
   const helpRef = useRef<HTMLDivElement>(null);
+  const recentRef = useRef<HTMLDivElement>(null);
   const closeHelp = useCallback(() => setIsHelpOpen(false), []);
+  const closeRecent = useCallback(() => setIsRecentOpen(false), []);
   useDismiss([helpRef], isHelpOpen, closeHelp);
+  useDismiss([recentRef], isRecentOpen, closeRecent);
 
   return (
     <header className="top-bar">
@@ -68,6 +78,32 @@ export function TopBar({
       </div>
 
       <div className="top-bar-right">
+        {recentFiles.length > 0 && (
+          <div className="popover-anchor" ref={recentRef}>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="최근 파일"
+              aria-expanded={isRecentOpen}
+              title="최근 파일"
+              onClick={() => setIsRecentOpen((open) => !open)}
+            >
+              <ClockIcon />
+            </button>
+            {isRecentOpen && (
+              <div className="popover popover-down recent-popover" role="dialog" aria-label="최근 파일">
+                <p className="popover-title">최근 파일</p>
+                <RecentFileList
+                  files={recentFiles}
+                  onOpen={(file) => {
+                    closeRecent();
+                    onOpenRecent(file);
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
         <button type="button" className="open-button" onClick={onOpenFile}>
           <FileIcon />
           <span>열기</span>

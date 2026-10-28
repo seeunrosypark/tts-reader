@@ -7,6 +7,7 @@ import {
 } from "./components/MarkdownViewer";
 import { PlayerControls } from "./components/PlayerControls";
 import { TableOfContents } from "./components/TableOfContents";
+import { RecentFileList } from "./components/RecentFileList";
 import { TopBar, type SaveState } from "./components/TopBar";
 import { FileIcon } from "./components/icons";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
@@ -27,11 +28,18 @@ import {
   pickMarkdownFile,
   readDroppedMarkdown,
   readPlainFile,
+  reopenHandle,
   supportsFileHandles,
   writeMarkdownFile,
   type OpenedMarkdown,
 } from "./utils/markdownFile";
 import { findReadingPosition, saveReadingPosition } from "./utils/readingPositions";
+import {
+  addRecentFile,
+  loadRecentFiles,
+  removeRecentFile,
+  type RecentFile,
+} from "./utils/recentFiles";
 import type { Sentence } from "./utils/sentenceSplitter";
 
 const VOICE_STORAGE_KEY = "tts-reader-voice";
@@ -83,6 +91,7 @@ export default function App() {
   const [saveState, setSaveState] = useState<SaveState>(null);
   const [isTocOpen, setIsTocOpen] = useState(loadTocOpen);
   const [isDragging, setIsDragging] = useState(false);
+  const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
   const [markdownSource, setMarkdownSource] = useState("");
   const [html, setHtml] = useState("");
   const [sentences, setSentences] = useState<Sentence[]>([]);
@@ -164,6 +173,9 @@ export default function App() {
       setSentences(parsed.sentences);
       setToc(parsed.toc);
       setFileName(opened.name);
+      if (opened.handle) {
+        addRecentFile(opened.handle).then(setRecentFiles, () => {});
+      }
       setSaveState(null);
       setHighlightedIndex(null);
       setError(null);
@@ -188,6 +200,29 @@ export default function App() {
       .then((opened) => opened && loadMarkdown(opened))
       .catch(showError("파일을 열지 못했습니다."));
   }, [loadMarkdown, showError]);
+
+  const handleOpenRecent = useCallback(
+    (file: RecentFile) => {
+      reopenHandle(file.handle)
+        .then(loadMarkdown)
+        .catch((openError: unknown) => {
+          // 옮겨지거나 삭제된 파일은 목록에서 뺀다.
+          if (openError instanceof DOMException && openError.name === "NotFoundError") {
+            removeRecentFile(file.handle).then(setRecentFiles, () => {});
+            setError(`'${file.name}' 파일을 찾을 수 없어 최근 목록에서 뺐습니다.`);
+            return;
+          }
+          showError("파일을 열지 못했습니다.")(openError);
+        });
+    },
+    [loadMarkdown, showError],
+  );
+
+  useEffect(() => {
+    if (supportsFileHandles()) {
+      void loadRecentFiles().then(setRecentFiles);
+    }
+  }, []);
 
   const handleDrop = (event: React.DragEvent) => {
     event.preventDefault();
@@ -392,8 +427,10 @@ export default function App() {
         saveState={saveState}
         isTocOpen={isTocOpen && hasToc}
         hasToc={hasToc}
+        recentFiles={recentFiles}
         onToggleToc={handleToggleToc}
         onOpenFile={handleOpenFile}
+        onOpenRecent={handleOpenRecent}
       />
 
       <input
@@ -457,6 +494,12 @@ export default function App() {
               <button type="button" className="primary-button" onClick={handleOpenFile}>
                 파일 열기
               </button>
+              {recentFiles.length > 0 && (
+                <div className="empty-state-recent">
+                  <p className="popover-title">최근 파일</p>
+                  <RecentFileList files={recentFiles} onOpen={handleOpenRecent} />
+                </div>
+              )}
             </section>
           )}
         </main>

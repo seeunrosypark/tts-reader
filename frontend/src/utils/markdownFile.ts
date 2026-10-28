@@ -25,6 +25,18 @@ async function readHandle(handle: FileSystemFileHandle): Promise<OpenedMarkdown>
   return { name: file.name, content: await file.text(), handle };
 }
 
+/** 최근 파일 목록 등 저장해 둔 핸들을 다시 연다. 브라우저를 다시 켜면 읽기 권한을 다시 묻는다. */
+export async function reopenHandle(handle: FileSystemFileHandle): Promise<OpenedMarkdown> {
+  const descriptor: FileSystemHandlePermissionDescriptor = { mode: "read" };
+  if ((await handle.queryPermission?.(descriptor)) !== "granted") {
+    const permission = await handle.requestPermission?.(descriptor);
+    if (permission !== "granted") {
+      throw new Error("파일을 읽을 권한이 없습니다.");
+    }
+  }
+  return readHandle(handle);
+}
+
 export async function readPlainFile(file: File): Promise<OpenedMarkdown> {
   return { name: file.name, content: await file.text(), handle: null };
 }

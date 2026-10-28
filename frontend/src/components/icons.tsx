@@ -100,6 +100,13 @@ export const FileIcon = () => (
   </Svg>
 );
 
+export const ClockIcon = () => (
+  <Svg>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </Svg>
+);
+
 export const HelpIcon = () => (
   <Svg>
     <circle cx="12" cy="12" r="9" />
