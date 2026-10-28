@@ -1,8 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 
 import { useDismiss } from "../hooks/useDismiss";
+import type { Theme } from "../hooks/useTheme";
 import type { RecentFile } from "../utils/recentFiles";
-import { ClockIcon, FileIcon, HelpIcon, TocIcon } from "./icons";
+import { ClockIcon, FileIcon, HelpIcon, MoonIcon, SunIcon, TocIcon } from "./icons";
 import { RecentFileList } from "./RecentFileList";
 
 export type SaveState = "saving" | "saved" | "memory-only" | null;
@@ -13,6 +14,8 @@ type TopBarProps = {
   isTocOpen: boolean;
   hasToc: boolean;
   recentFiles: RecentFile[];
+  theme: Theme;
+  onToggleTheme: () => void;
   onToggleToc: () => void;
   onOpenFile: () => void;
   onOpenRecent: (file: RecentFile) => void;
@@ -37,6 +40,8 @@ export function TopBar({
   isTocOpen,
   hasToc,
   recentFiles,
+  theme,
+  onToggleTheme,
   onToggleToc,
   onOpenFile,
   onOpenRecent,
@@ -107,6 +112,15 @@ export function TopBar({
         <button type="button" className="open-button" onClick={onOpenFile}>
           <FileIcon />
           <span>열기</span>
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={theme === "dark" ? "밝은 테마로 전환" : "어두운 테마로 전환"}
+          title={theme === "dark" ? "밝은 테마" : "어두운 테마"}
+          onClick={onToggleTheme}
+        >
+          {theme === "dark" ? <SunIcon /> : <MoonIcon />}
         </button>
         <div className="popover-anchor" ref={helpRef}>
           <button

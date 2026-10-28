@@ -12,6 +12,7 @@ import { TopBar, type SaveState } from "./components/TopBar";
 import { FileIcon } from "./components/icons";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useMediaSession } from "./hooks/useMediaSession";
+import { useTheme } from "./hooks/useTheme";
 import { useTtsPlayer } from "./hooks/useTtsPlayer";
 import { toggleBoldInMarkdown } from "./utils/markdownBold";
 import {
@@ -93,6 +94,7 @@ export default function App() {
   const [isTocOpen, setIsTocOpen] = useState(loadTocOpen);
   const [isDragging, setIsDragging] = useState(false);
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
+  const { theme, toggleTheme } = useTheme();
   const [markdownSource, setMarkdownSource] = useState("");
   const [html, setHtml] = useState("");
   const [sentences, setSentences] = useState<Sentence[]>([]);
@@ -440,6 +442,8 @@ export default function App() {
         isTocOpen={isTocOpen && hasToc}
         hasToc={hasToc}
         recentFiles={recentFiles}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onToggleToc={handleToggleToc}
         onOpenFile={handleOpenFile}
         onOpenRecent={handleOpenRecent}

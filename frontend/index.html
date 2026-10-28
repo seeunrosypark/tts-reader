@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Markdown TTS Reader</title>
+    <script>
+      // 직접 고른 테마를 첫 렌더 전에 적용해 깜빡임을 막는다.
+      try {
+        const theme = localStorage.getItem("tts-reader-theme");
+        if (theme === "light" || theme === "dark") {
+          document.documentElement.dataset.theme = theme;
+        }
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
