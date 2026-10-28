@@ -7,6 +7,11 @@ export type PlayerStatus = "idle" | "playing" | "paused";
 
 const AUDIO_CACHE_LIMIT = 50;
 const PREFETCH_AHEAD = 2;
+const RETRY_DELAY_MS = 800;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 type UseTtsPlayerOptions = {
   sentences: Sentence[];
@@ -14,6 +19,8 @@ type UseTtsPlayerOptions = {
   speed: number;
   volume: number;
   onHighlightChange: (index: number | null) => void;
+  /** 합성·재생에 실패해 일시정지했을 때 호출된다. */
+  onError?: (error: unknown) => void;
 };
 
 export function useTtsPlayer({
@@ -22,6 +29,7 @@ export function useTtsPlayer({
   speed,
   volume,
   onHighlightChange,
+  onError,
 }: UseTtsPlayerOptions) {
   const [status, setStatus] = useState<PlayerStatus>("idle");
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -37,6 +45,7 @@ export function useTtsPlayer({
   const audioCacheRef = useRef<Map<string, Promise<Blob>>>(new Map());
   // 재생 루프마다 증가. 늦게 도착한 오디오가 이전 루프에서 재생되는 것을 막는다.
   const generationRef = useRef(0);
+  const onErrorRef = useRef(onError);
 
   const playableSentences = sentences.filter((sentence) => !sentence.skip);
 
@@ -54,6 +63,10 @@ export function useTtsPlayer({
   useEffect(() => {
     voiceRef.current = voice;
   }, [voice]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   const cleanupAudio = useCallback(() => {
     if (audioRef.current) {
@@ -89,7 +102,13 @@ export function useTtsPlayer({
       return cached;
     }
 
-    const request = synthesizeTts(sentence.text, voiceRef.current, speedRef.current);
+    const { text } = sentence;
+    const voice = voiceRef.current;
+    const speed = speedRef.current;
+    // 일시적인 네트워크·TTS 서버 오류는 한 번 더 시도한다.
+    const request = synthesizeTts(text, voice, speed).catch(() =>
+      delay(RETRY_DELAY_MS).then(() => synthesizeTts(text, voice, speed)),
+    );
     cache.set(key, request);
     request.catch(() => {
       if (cache.get(key) === request) {
@@ -160,9 +179,18 @@ export function useTtsPlayer({
     onHighlightChange(null);
   }, [onHighlightChange]);
 
-  const runPlaybackLoop = useCallback(async () => {
-    const generation = ++generationRef.current;
+  const pauseOnError = useCallback(
+    (error: unknown) => {
+      cleanupAudio();
+      statusRef.current = "paused";
+      setStatus("paused");
+      setSentenceProgress(0);
+      onErrorRef.current?.(error);
+    },
+    [cleanupAudio],
+  );
 
+  const playFrom = useCallback(async (generation: number) => {
     let startPlayableIndex = getPlayableIndex(currentIndexRef.current);
     if (startPlayableIndex < 0) {
       startPlayableIndex = Math.max(
@@ -184,6 +212,18 @@ export function useTtsPlayer({
       finishPlayback();
     }
   }, [finishPlayback, getPlayableIndex, playableSentences, playSentence]);
+
+  const runPlaybackLoop = useCallback(async () => {
+    const generation = ++generationRef.current;
+    try {
+      await playFrom(generation);
+    } catch (error) {
+      // 정지·이동으로 이미 다른 루프가 시작됐다면 그 루프의 상태를 건드리지 않는다.
+      if (generation === generationRef.current) {
+        pauseOnError(error);
+      }
+    }
+  }, [pauseOnError, playFrom]);
 
   const play = useCallback(
     (startSentenceIndex?: number) => {
@@ -234,7 +274,7 @@ export function useTtsPlayer({
       statusRef.current = "playing";
       setStatus("playing");
       const audio = audioRef.current;
-      void audio.play();
+      audio.play().catch(pauseOnError);
       audio.onended = () => {
         const nextPlayable = playableSentences[getPlayableIndex(currentIndexRef.current) + 1];
         if (nextPlayable) {
@@ -248,7 +288,7 @@ export function useTtsPlayer({
     }
 
     play();
-  }, [finishPlayback, getPlayableIndex, play, playableSentences, runPlaybackLoop]);
+  }, [finishPlayback, getPlayableIndex, pauseOnError, play, playableSentences, runPlaybackLoop]);
 
   const jumpToPlayable = useCallback(
     (playableIndex: number) => {

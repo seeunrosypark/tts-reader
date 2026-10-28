@@ -68,6 +68,9 @@ function loadTocOpen(): boolean {
   return !isNarrowScreen() && localStorage.getItem(TOC_COLLAPSED_STORAGE_KEY) !== "true";
 }
 
+const PLAYBACK_ERROR_MESSAGE =
+  "음성을 받아 오지 못해 일시정지했습니다. 백엔드와 인터넷 연결을 확인한 뒤 다시 재생하세요.";
+
 export default function App() {
   const viewerRef = useRef<MarkdownViewerHandle>(null);
   const plainMapperRef = useRef<MarkdownPlainMapper | null>(null);
@@ -89,6 +92,11 @@ export default function App() {
   const [isMuted, setIsMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const handlePlaybackError = useCallback((playbackError: unknown) => {
+    console.error(playbackError);
+    setError(PLAYBACK_ERROR_MESSAGE);
+  }, []);
+
   const {
     status,
     currentPlayablePosition,
@@ -108,6 +116,7 @@ export default function App() {
     speed,
     volume: isMuted ? 0 : volume,
     onHighlightChange: setHighlightedIndex,
+    onError: handlePlaybackError,
   });
 
   const applyParsedMarkdown = useCallback(
@@ -279,6 +288,12 @@ export default function App() {
       .then(setVoices)
       .catch(showError("음성 목록을 불러오지 못했습니다. 백엔드가 실행 중인지 확인하세요."));
   }, [showError]);
+
+  useEffect(() => {
+    if (status === "playing") {
+      setError((current) => (current === PLAYBACK_ERROR_MESSAGE ? null : current));
+    }
+  }, [status]);
 
   const activeTocId = useMemo(
     () => findActiveTocItem(toc, highlightedIndex),
