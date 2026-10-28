@@ -31,6 +31,7 @@ import {
   writeMarkdownFile,
   type OpenedMarkdown,
 } from "./utils/markdownFile";
+import { findReadingPosition, saveReadingPosition } from "./utils/readingPositions";
 import type { Sentence } from "./utils/sentenceSplitter";
 
 const VOICE_STORAGE_KEY = "tts-reader-voice";
@@ -76,6 +77,8 @@ export default function App() {
   const plainMapperRef = useRef<MarkdownPlainMapper | null>(null);
   const fileHandleRef = useRef<FileSystemFileHandle | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // 파일을 연 직후 문장 목록이 반영되면 마지막으로 읽던 위치로 옮긴다.
+  const pendingResumeRef = useRef(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>(null);
   const [isTocOpen, setIsTocOpen] = useState(loadTocOpen);
@@ -155,6 +158,7 @@ export default function App() {
       plainMapperRef.current = createMarkdownPlainMapper(opened.content);
       const parsed = parseLocalMarkdown(opened.content);
       fileHandleRef.current = opened.handle;
+      pendingResumeRef.current = true;
       setMarkdownSource(opened.content);
       setHtml(parsed.html);
       setSentences(parsed.sentences);
@@ -288,6 +292,27 @@ export default function App() {
       .then(setVoices)
       .catch(showError("음성 목록을 불러오지 못했습니다. 백엔드가 실행 중인지 확인하세요."));
   }, [showError]);
+
+  useEffect(() => {
+    if (!pendingResumeRef.current || !fileName) {
+      return;
+    }
+    pendingResumeRef.current = false;
+    const resumeIndex = findReadingPosition(fileName, sentences);
+    if (resumeIndex !== null) {
+      jumpToSentence(resumeIndex);
+    }
+  }, [fileName, jumpToSentence, sentences]);
+
+  useEffect(() => {
+    if (highlightedIndex === null || !fileName || pendingResumeRef.current) {
+      return;
+    }
+    const sentence = sentences.find((item) => item.index === highlightedIndex);
+    if (sentence && !sentence.skip) {
+      saveReadingPosition(fileName, sentence);
+    }
+  }, [fileName, highlightedIndex, sentences]);
 
   useEffect(() => {
     if (status === "playing") {
