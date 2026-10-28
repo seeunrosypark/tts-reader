@@ -7,6 +7,7 @@ import {
   getAncestorIds,
   type TocNode,
 } from "../utils/tocTree";
+import { ChevronIcon } from "./icons";
 
 const TOC_SECTIONS_COLLAPSED_KEY = "tts-reader-toc-sections-collapsed";
 
@@ -70,7 +71,7 @@ function TocAccordionItem({
             aria-label={isSectionCollapsed ? "하위 목차 펼치기" : "하위 목차 접기"}
             onClick={() => onToggle(node.item.id)}
           >
-            {isSectionCollapsed ? "▶" : "▼"}
+            <ChevronIcon />
           </button>
         ) : (
           <span className="toc-expand-spacer" aria-hidden="true" />
@@ -169,7 +170,8 @@ export function TableOfContents({
   };
 
   const collapseAllSections = () => {
-    const allExpandable = new Set(collectExpandableIds(tocTree));
+    // ## 제목 목록은 보이도록 H2부터 접는다.
+    const allExpandable = new Set(collectExpandableIds(tocTree, 2));
     setCollapsedSectionIds(allExpandable);
     saveSectionsCollapsedState(allExpandable);
   };

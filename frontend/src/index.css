@@ -353,7 +353,7 @@ kbd {
   top: calc(var(--top-bar-height) + 24px);
   flex: 0 0 var(--toc-width);
   max-height: calc(100vh - var(--top-bar-height) - var(--player-height) - 48px);
-  padding: 12px 8px 12px 12px;
+  padding: 8px 4px 8px 4px;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -365,8 +365,8 @@ kbd {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
-  padding-right: 4px;
+  margin-bottom: 4px;
+  padding: 0 0 0 8px;
 }
 
 .toc-title {
@@ -406,24 +406,34 @@ kbd {
 .toc-row {
   display: flex;
   align-items: flex-start;
-  gap: 2px;
 }
 
 .toc-expand-button,
 .toc-expand-spacer {
   flex-shrink: 0;
-  width: 22px;
-  height: 30px;
+  width: 18px;
+  height: 26px;
 }
 
 .toc-expand-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0;
   border: none;
   border-radius: 4px;
   background: transparent;
   color: #94a3b8;
-  font-size: 0.6rem;
-  line-height: 30px;
+}
+
+.toc-expand-button .icon {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.15s ease;
+}
+
+.toc-expand-button[aria-expanded="true"] .icon {
+  transform: rotate(90deg);
 }
 
 .toc-expand-button:hover {
@@ -433,7 +443,7 @@ kbd {
 .toc-link-button {
   flex: 1;
   min-width: 0;
-  padding: 5px 8px;
+  padding: 3px 6px;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -451,8 +461,8 @@ kbd {
 
 .toc-children {
   list-style: none;
-  margin: 0 0 0 11px;
-  padding: 0 0 0 6px;
+  margin: 0 0 0 9px;
+  padding: 0 0 0 2px;
   border-left: 1px solid var(--border);
 }
 

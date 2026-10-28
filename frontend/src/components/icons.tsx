@@ -19,6 +19,12 @@ function Svg({ children }: { children: ReactNode }) {
   );
 }
 
+export const ChevronIcon = () => (
+  <Svg>
+    <path d="m9 6 6 6-6 6" />
+  </Svg>
+);
+
 export const PlayIcon = () => (
   <Svg>
     <path d="M7 4.5v15l12-7.5z" fill="currentColor" />

@@ -51,12 +51,17 @@ export function getAncestorIds(toc: TocItem[], activeId: string | null): Set<str
   return ancestors;
 }
 
-export function collectExpandableIds(nodes: TocNode[]): string[] {
+/** 하위 항목이 있는 노드 중 minLevel 이상인 것의 id. minLevel보다 얕은 노드는 펼친 채로 둔다. */
+export function collectExpandableIds(nodes: TocNode[], minLevel = 1): string[] {
   const ids: string[] = [];
 
   function walk(nodeList: TocNode[]) {
     for (const node of nodeList) {
       if (node.children.length > 0) {
+        if (node.item.level < minLevel) {
+          walk(node.children);
+          continue;
+        }
         ids.push(node.item.id);
         walk(node.children);
       }
