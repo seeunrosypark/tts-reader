@@ -11,6 +11,7 @@ import { RecentFileList } from "./components/RecentFileList";
 import { TopBar, type SaveState } from "./components/TopBar";
 import { FileIcon } from "./components/icons";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useMediaSession } from "./hooks/useMediaSession";
 import { useTtsPlayer } from "./hooks/useTtsPlayer";
 import { toggleBoldInMarkdown } from "./utils/markdownBold";
 import {
@@ -369,6 +370,17 @@ export default function App() {
     setVoice(nextVoice);
     localStorage.setItem(VOICE_STORAGE_KEY, nextVoice);
   };
+
+  useMediaSession({
+    status,
+    title: activeHeading?.text ?? fileName,
+    album: fileName,
+    onPlay: () => (status === "paused" ? resume() : handlePlay()),
+    onPause: pause,
+    onStop: stop,
+    onPrevious: skipPrevious,
+    onNext: skipNext,
+  });
 
   const handleSpeedChange = (nextSpeed: number) => {
     setSpeed(nextSpeed);
