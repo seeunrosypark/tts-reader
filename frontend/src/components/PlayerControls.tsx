@@ -14,6 +14,7 @@ import {
   StopIcon,
   VolumeIcon,
 } from "./icons";
+import { GoalRing } from "./GoalRing";
 import { SettingsPanel } from "./SettingsPanel";
 
 type PlayerControlsProps = {
@@ -26,6 +27,10 @@ type PlayerControlsProps = {
   currentPlayablePosition: number;
   overallProgress: number;
   readingProgress: ReadingProgress;
+  todayGoalFraction: number;
+  todayMinutes: number;
+  goalMinutes: number;
+  onOpenStats: () => void;
   isMuted: boolean;
   activeHeading: TocItem | null;
   onPlayToggle: () => void;
@@ -65,6 +70,10 @@ export function PlayerControls({
   currentPlayablePosition,
   overallProgress,
   readingProgress,
+  todayGoalFraction,
+  todayMinutes,
+  goalMinutes,
+  onOpenStats,
   isMuted,
   activeHeading,
   onPlayToggle,
@@ -171,6 +180,17 @@ export function PlayerControls({
         </div>
 
         <div className="player-extra">
+          <button
+            type="button"
+            className="goal-button"
+            title={`오늘 ${todayMinutes}분 / 목표 ${goalMinutes}분 · 독서 기록 보기`}
+            aria-label={`오늘의 목표 ${goalMinutes}분 중 ${todayMinutes}분`}
+            onClick={onOpenStats}
+          >
+            <GoalRing fraction={todayGoalFraction} size={40} stroke={4}>
+              {todayGoalFraction >= 1 ? "✓" : todayMinutes}
+            </GoalRing>
+          </button>
           <div className="progress-stats">
             <ProgressRow
               label="전체"

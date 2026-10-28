@@ -21,7 +21,15 @@ type UseTtsPlayerOptions = {
   onHighlightChange: (index: number | null) => void;
   /** 합성·재생에 실패해 일시정지했을 때 호출된다. */
   onError?: (error: unknown) => void;
+  /** 문장을 끝까지 들었을 때만 호출된다 (건너뛰기·이동·정지는 제외). seconds는 실제 재생 시간. */
+  onSentenceListened?: (sentence: Sentence, seconds: number) => void;
 };
+
+function listenedSeconds(audio: HTMLAudioElement): number {
+  return Number.isFinite(audio.duration) && audio.playbackRate > 0
+    ? audio.duration / audio.playbackRate
+    : 0;
+}
 
 export function useTtsPlayer({
   sentences,
@@ -30,6 +38,7 @@ export function useTtsPlayer({
   volume,
   onHighlightChange,
   onError,
+  onSentenceListened,
 }: UseTtsPlayerOptions) {
   const [status, setStatus] = useState<PlayerStatus>("idle");
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -47,6 +56,7 @@ export function useTtsPlayer({
   // 재생 루프마다 증가. 늦게 도착한 오디오가 이전 루프에서 재생되는 것을 막는다.
   const generationRef = useRef(0);
   const onErrorRef = useRef(onError);
+  const onSentenceListenedRef = useRef(onSentenceListened);
 
   const playableSentences = sentences.filter((sentence) => !sentence.skip);
 
@@ -71,6 +81,10 @@ export function useTtsPlayer({
   useEffect(() => {
     onErrorRef.current = onError;
   }, [onError]);
+
+  useEffect(() => {
+    onSentenceListenedRef.current = onSentenceListened;
+  }, [onSentenceListened]);
 
   const cleanupAudio = useCallback(() => {
     if (audioRef.current) {
@@ -167,6 +181,7 @@ export function useTtsPlayer({
         void audio.play().catch(reject);
       });
 
+      onSentenceListenedRef.current?.(sentence, listenedSeconds(audio));
       URL.revokeObjectURL(url);
       audioRef.current = null;
       return true;
@@ -280,6 +295,10 @@ export function useTtsPlayer({
       const audio = audioRef.current;
       audio.play().catch(pauseOnError);
       audio.onended = () => {
+        const listened = sentences.find((item) => item.index === currentIndexRef.current);
+        if (listened) {
+          onSentenceListenedRef.current?.(listened, listenedSeconds(audio));
+        }
         const nextPlayable = playableSentences[getPlayableIndex(currentIndexRef.current) + 1];
         if (nextPlayable) {
           currentIndexRef.current = nextPlayable.index;
@@ -292,7 +311,7 @@ export function useTtsPlayer({
     }
 
     play();
-  }, [finishPlayback, getPlayableIndex, pauseOnError, play, playableSentences, runPlaybackLoop]);
+  }, [finishPlayback, getPlayableIndex, pauseOnError, play, playableSentences, runPlaybackLoop, sentences]);
 
   const jumpToPlayable = useCallback(
     (playableIndex: number) => {

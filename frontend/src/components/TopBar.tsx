@@ -15,6 +15,8 @@ type TopBarProps = {
   hasToc: boolean;
   recentFiles: RecentFile[];
   theme: Theme;
+  streak: number;
+  onOpenStats: () => void;
   onToggleTheme: () => void;
   onToggleToc: () => void;
   onOpenFile: () => void;
@@ -41,6 +43,8 @@ export function TopBar({
   hasToc,
   recentFiles,
   theme,
+  streak,
+  onOpenStats,
   onToggleTheme,
   onToggleToc,
   onOpenFile,
@@ -83,6 +87,15 @@ export function TopBar({
       </div>
 
       <div className="top-bar-right">
+        <button
+          type="button"
+          className={`streak-chip${streak > 0 ? " is-active" : ""}`}
+          title={streak > 0 ? `${streak}일 연속으로 목표 달성 · 독서 기록 보기` : "독서 기록 보기"}
+          onClick={onOpenStats}
+        >
+          <span aria-hidden="true">🔥</span>
+          {streak}
+        </button>
         {recentFiles.length > 0 && (
           <div className="popover-anchor" ref={recentRef}>
             <button

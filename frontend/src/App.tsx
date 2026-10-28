@@ -8,10 +8,13 @@ import {
 import { PlayerControls } from "./components/PlayerControls";
 import { TableOfContents } from "./components/TableOfContents";
 import { RecentFileList } from "./components/RecentFileList";
+import { StatsDialog } from "./components/StatsDialog";
+import { Toasts, type Toast } from "./components/Toasts";
 import { TopBar, type SaveState } from "./components/TopBar";
 import { FileIcon } from "./components/icons";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useMediaSession } from "./hooks/useMediaSession";
+import { useReadingStats, type StatsEvent } from "./hooks/useReadingStats";
 import { useTheme } from "./hooks/useTheme";
 import { useTtsPlayer } from "./hooks/useTtsPlayer";
 import { toggleBoldInMarkdown } from "./utils/markdownBold";
@@ -37,6 +40,7 @@ import {
 } from "./utils/markdownFile";
 import { findReadingPosition, saveReadingPosition } from "./utils/readingPositions";
 import { computeReadingProgress } from "./utils/readingProgress";
+import { computeStreak, dayKey, goalSeconds } from "./utils/readingStats";
 import {
   addRecentFile,
   loadRecentFiles,
@@ -82,6 +86,8 @@ function loadTocOpen(): boolean {
 
 const PLAYBACK_ERROR_MESSAGE =
   "음성을 받아 오지 못해 일시정지했습니다. 백엔드와 인터넷 연결을 확인한 뒤 다시 재생하세요.";
+const AUTOPLAY_BLOCKED_MESSAGE =
+  "브라우저가 자동 재생을 막아 일시정지했습니다. 재생 버튼을 눌러 주세요.";
 
 export default function App() {
   const viewerRef = useRef<MarkdownViewerHandle>(null);
@@ -96,6 +102,38 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
   const { theme, toggleTheme } = useTheme();
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const nextToastIdRef = useRef(0);
+
+  const pushToast = useCallback((toast: Omit<Toast, "id">) => {
+    const id = ++nextToastIdRef.current;
+    setToasts((current) => [...current, { ...toast, id }]);
+  }, []);
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts((current) => current.filter((toast) => toast.id !== id));
+  }, []);
+
+  const handleStatsEvent = useCallback(
+    (event: StatsEvent) => {
+      if (event.type === "goal-reached") {
+        pushToast({
+          icon: "🎯",
+          title: "오늘의 목표 달성!",
+          detail: event.streak > 1 ? `🔥 ${event.streak}일 연속` : "내일도 이어서 연속 기록을 만들어 보세요",
+          celebrate: true,
+        });
+      }
+    },
+    [pushToast],
+  );
+
+  const { stats, recordListening, setGoalMinutes } = useReadingStats(handleStatsEvent);
+  const handleSentenceListened = useCallback(
+    (_sentence: Sentence, seconds: number) => recordListening(seconds),
+    [recordListening],
+  );
   const [markdownSource, setMarkdownSource] = useState("");
   const [html, setHtml] = useState("");
   const [sentences, setSentences] = useState<Sentence[]>([]);
@@ -110,7 +148,9 @@ export default function App() {
 
   const handlePlaybackError = useCallback((playbackError: unknown) => {
     console.error(playbackError);
-    setError(PLAYBACK_ERROR_MESSAGE);
+    const isAutoplayBlocked =
+      playbackError instanceof DOMException && playbackError.name === "NotAllowedError";
+    setError(isAutoplayBlocked ? AUTOPLAY_BLOCKED_MESSAGE : PLAYBACK_ERROR_MESSAGE);
   }, []);
 
   const {
@@ -135,6 +175,7 @@ export default function App() {
     volume: isMuted ? 0 : volume,
     onHighlightChange: setHighlightedIndex,
     onError: handlePlaybackError,
+    onSentenceListened: handleSentenceListened,
   });
 
   const applyParsedMarkdown = useCallback(
@@ -357,7 +398,9 @@ export default function App() {
 
   useEffect(() => {
     if (status === "playing") {
-      setError((current) => (current === PLAYBACK_ERROR_MESSAGE ? null : current));
+      setError((current) =>
+        current === PLAYBACK_ERROR_MESSAGE || current === AUTOPLAY_BLOCKED_MESSAGE ? null : current,
+      );
     }
   }, [status]);
 
@@ -386,6 +429,10 @@ export default function App() {
     onPrevious: skipPrevious,
     onNext: skipNext,
   });
+
+  const now = new Date();
+  const todaySeconds = stats.days[dayKey(now)]?.seconds ?? 0;
+  const streak = computeStreak(stats, now);
 
   const readingProgress = useMemo(
     () => computeReadingProgress(sentences, toc, currentIndex, sentenceProgress),
@@ -451,6 +498,8 @@ export default function App() {
         hasToc={hasToc}
         recentFiles={recentFiles}
         theme={theme}
+        streak={streak}
+        onOpenStats={() => setIsStatsOpen(true)}
         onToggleTheme={toggleTheme}
         onToggleToc={handleToggleToc}
         onOpenFile={handleOpenFile}
@@ -539,6 +588,10 @@ export default function App() {
         currentPlayablePosition={currentPlayablePosition}
         overallProgress={overallProgress}
         readingProgress={readingProgress}
+        todayGoalFraction={todaySeconds / goalSeconds(stats)}
+        todayMinutes={Math.floor(todaySeconds / 60)}
+        goalMinutes={stats.goalMinutes}
+        onOpenStats={() => setIsStatsOpen(true)}
         isMuted={isMuted}
         activeHeading={activeHeading}
         onPlayToggle={handlePlayToggle}
@@ -551,6 +604,16 @@ export default function App() {
         onSeek={seekToFraction}
         onToggleMute={() => setIsMuted((muted) => !muted)}
       />
+
+      {isStatsOpen && (
+        <StatsDialog
+          stats={stats}
+          onClose={() => setIsStatsOpen(false)}
+          onGoalMinutesChange={setGoalMinutes}
+        />
+      )}
+
+      <Toasts toasts={toasts} onDismiss={dismissToast} />
 
       {isDragging && (
         <div className="drop-overlay" aria-hidden="true">
