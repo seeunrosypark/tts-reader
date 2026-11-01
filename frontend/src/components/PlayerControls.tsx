@@ -4,18 +4,17 @@ import type { VoiceInfo } from "../api/ttsClient";
 import type { PlayerStatus } from "../hooks/useTtsPlayer";
 import type { TocItem } from "../utils/markdownToSentences";
 import type { RangeProgress, ReadingProgress } from "../utils/readingProgress";
+import { estimateSeconds, formatRemaining } from "../utils/speechRate";
 import {
-  MuteIcon,
   NextIcon,
   PauseIcon,
   PlayIcon,
   PrevIcon,
   SettingsIcon,
   StopIcon,
-  VolumeIcon,
 } from "./icons";
-import { GoalRing } from "./GoalRing";
 import { SettingsPanel } from "./SettingsPanel";
+import { VolumeControl } from "./VolumeControl";
 
 type PlayerControlsProps = {
   status: PlayerStatus;
@@ -27,10 +26,9 @@ type PlayerControlsProps = {
   currentPlayablePosition: number;
   overallProgress: number;
   readingProgress: ReadingProgress;
-  todayGoalFraction: number;
-  todayMinutes: number;
-  goalMinutes: number;
-  onOpenStats: () => void;
+  /** 현재 음성이 1배속에서 1초에 읽는 글자 수 */
+  charsPerSecond: number;
+  isSpeechRateMeasured: boolean;
   isMuted: boolean;
   activeHeading: TocItem | null;
   onPlayToggle: () => void;
@@ -44,17 +42,37 @@ type PlayerControlsProps = {
   onToggleMute: () => void;
 };
 
+/** "ko-KR-SunHiNeural" → "SunHi" */
+function voiceLabel(shortName: string): string {
+  return shortName.split("-").pop()?.replace(/Neural$/, "") ?? shortName;
+}
+
 function percent({ progress, count }: RangeProgress): number {
   return count === 0 ? 0 : Math.floor(progress * 100);
 }
 
-function ProgressRow({ label, range, title }: { label: string; range: RangeProgress; title: string }) {
+type ProgressRowProps = {
+  label: string;
+  range: RangeProgress;
+  title: string;
+  /** 1배속 기준 초당 글자 수 × 재생 속도 */
+  charsPerSecondAtSpeed: number;
+  rateNote: string;
+};
+
+function ProgressRow({ label, range, title, charsPerSecondAtSpeed, rateNote }: ProgressRowProps) {
+  const remaining = formatRemaining(estimateSeconds(range.remainingChars, charsPerSecondAtSpeed, 1));
+  const total = formatRemaining(estimateSeconds(range.totalChars, charsPerSecondAtSpeed, 1));
   return (
-    <div className="progress-row" title={title}>
+    <div className="progress-row" title={`${title}\n남은 시간 ${remaining} / 전체 ${total} (${rateNote})`}>
       <span className="progress-label">{label}</span>
       <span className="progress-percent">{percent(range)}%</span>
       <span className="progress-count">
         {range.position} / {range.count}
+      </span>
+      <span className="progress-remaining">
+        {remaining}
+        <span className="progress-remaining-suffix"> 남음</span>
       </span>
     </div>
   );
@@ -70,10 +88,8 @@ export function PlayerControls({
   currentPlayablePosition,
   overallProgress,
   readingProgress,
-  todayGoalFraction,
-  todayMinutes,
-  goalMinutes,
-  onOpenStats,
+  charsPerSecond,
+  isSpeechRateMeasured,
   isMuted,
   activeHeading,
   onPlayToggle,
@@ -86,6 +102,10 @@ export function PlayerControls({
   onSeek,
   onToggleMute,
 }: PlayerControlsProps) {
+  const charsPerSecondAtSpeed = charsPerSecond * speed;
+  const rateNote = `${speed}배속 · ${
+    isSpeechRateMeasured ? "이 음성으로 들은 기록 기준" : "기본 낭독 속도 기준, 들을수록 정확해짐"
+  }`;
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [dragValue, setDragValue] = useState<number | null>(null);
   const seekValue = dragValue ?? Math.round(overallProgress * 1000);
@@ -169,7 +189,7 @@ export function PlayerControls({
           </button>
           <button
             type="button"
-            className="icon-button"
+            className="icon-button stop-button"
             aria-label="정지"
             title="정지"
             onClick={onStop}
@@ -180,63 +200,53 @@ export function PlayerControls({
         </div>
 
         <div className="player-extra">
-          <button
-            type="button"
-            className="goal-button"
-            title={`오늘 ${todayMinutes}분 / 목표 ${goalMinutes}분 · 독서 기록 보기`}
-            aria-label={`오늘의 목표 ${goalMinutes}분 중 ${todayMinutes}분`}
-            onClick={onOpenStats}
-          >
-            <GoalRing fraction={todayGoalFraction} size={40} stroke={4}>
-              {todayGoalFraction >= 1 ? "✓" : todayMinutes}
-            </GoalRing>
-          </button>
           <div className="progress-stats">
             <ProgressRow
+              charsPerSecondAtSpeed={charsPerSecondAtSpeed}
+              rateNote={rateNote}
               label="전체"
               range={readingProgress.overall}
               title="문서 전체 진행률 · 현재 문장 / 전체 문장"
             />
             {readingProgress.chapter && (
               <ProgressRow
+                charsPerSecondAtSpeed={charsPerSecondAtSpeed}
+                rateNote={rateNote}
                 label="장"
                 range={readingProgress.chapter}
                 title={`${readingProgress.chapter.title ?? "머리말"} 진행률 · 장 안의 현재 문장 / 장 문장 수`}
               />
             )}
           </div>
-          <button
-            type="button"
-            className="icon-button"
-            aria-pressed={isMuted}
-            aria-label={isMuted ? "음소거 해제" : "음소거"}
-            title={isMuted ? "음소거 해제" : "음소거"}
-            onClick={onToggleMute}
-          >
-            {isMuted ? <MuteIcon /> : <VolumeIcon />}
-          </button>
+          <span className="player-divider" aria-hidden="true" />
+          <VolumeControl
+            volume={volume}
+            isMuted={isMuted}
+            onVolumeChange={onVolumeChange}
+            onToggleMute={onToggleMute}
+          />
+          <span className="player-divider" aria-hidden="true" />
           <div className="popover-anchor" ref={settingsRef}>
             <button
               type="button"
               className="speed-button"
               aria-haspopup="dialog"
               aria-expanded={isSettingsOpen}
-              title="속도 · 볼륨 · 음성"
+              title="재생 속도 · 음성"
               onClick={() => setIsSettingsOpen((open) => !open)}
             >
               <SettingsIcon />
-              <span>{speed.toFixed(1)}x</span>
+              <span className="speed-value">{speed.toFixed(1)}x</span>
+              <span className="speed-voice">{voiceLabel(voice)}</span>
             </button>
             <SettingsPanel
               isOpen={isSettingsOpen}
               speed={speed}
-              volume={volume}
               voice={voice}
               voices={voices}
               anchorRef={settingsRef}
               onClose={closeSettings}
               onSpeedChange={onSpeedChange}
-              onVolumeChange={onVolumeChange}
               onVoiceChange={onVoiceChange}
             />
           </div>

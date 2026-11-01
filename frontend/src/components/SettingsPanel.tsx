@@ -6,26 +6,22 @@ import { useDismiss } from "../hooks/useDismiss";
 type SettingsPanelProps = {
   isOpen: boolean;
   speed: number;
-  volume: number;
   voice: string;
   voices: VoiceInfo[];
   anchorRef: React.RefObject<HTMLElement | null>;
   onClose: () => void;
   onSpeedChange: (speed: number) => void;
-  onVolumeChange: (volume: number) => void;
   onVoiceChange: (voice: string) => void;
 };
 
 export function SettingsPanel({
   isOpen,
   speed,
-  volume,
   voice,
   voices,
   anchorRef,
   onClose,
   onSpeedChange,
-  onVolumeChange,
   onVoiceChange,
 }: SettingsPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -36,7 +32,7 @@ export function SettingsPanel({
   }
 
   return (
-    <div ref={panelRef} className="popover popover-up settings-panel" role="dialog" aria-label="TTS 설정">
+    <div ref={panelRef} className="popover popover-up settings-panel" role="dialog" aria-label="재생 속도와 음성">
       <div className="settings-panel-row">
         <label htmlFor="speed-slider">
           속도 <output>{speed.toFixed(1)}x</output>
@@ -49,20 +45,6 @@ export function SettingsPanel({
           step="0.1"
           value={speed}
           onChange={(event) => onSpeedChange(Number(event.target.value))}
-        />
-      </div>
-      <div className="settings-panel-row">
-        <label htmlFor="volume-slider">
-          볼륨 <output>{Math.round(volume * 100)}%</output>
-        </label>
-        <input
-          id="volume-slider"
-          type="range"
-          min="0"
-          max="1"
-          step="0.05"
-          value={volume}
-          onChange={(event) => onVolumeChange(Number(event.target.value))}
         />
       </div>
       <div className="settings-panel-row">

@@ -43,7 +43,14 @@ import {
 } from "./utils/markdownFile";
 import { findReadingPosition, saveReadingPosition } from "./utils/readingPositions";
 import { chapterText, computeReadingProgress, listChapters, type Chapter } from "./utils/readingProgress";
-import { computeStreak, dayKey, goalSeconds } from "./utils/readingStats";
+import {
+  addSpeechSample,
+  charsPerSecond,
+  isMeasured,
+  loadSpeechRates,
+  saveSpeechRates,
+} from "./utils/speechRate";
+import { computeStreak } from "./utils/readingStats";
 import {
   addRecentFile,
   loadRecentFiles,
@@ -173,10 +180,20 @@ export default function App() {
     sentences: Sentence[];
     toc: TocItem[];
     speed: number;
-  }>({ fileName: null, sentences: [], toc: [], speed: 1 });
+    voice: string;
+  }>({ fileName: null, sentences: [], toc: [], speed: 1, voice: DEFAULT_VOICE });
+  // 남은 시간 계산용: 음성마다 1배속에서 1초에 읽는 글자 수를 실제로 들은 문장으로 학습한다.
+  const [speechRates, setSpeechRates] = useState(loadSpeechRates);
   const handleSentenceListened = useCallback(
-    (sentence: Sentence, seconds: number) =>
-      recordListening({ ...listenContextRef.current, sentence, seconds }),
+    (sentence: Sentence, seconds: number) => {
+      const { voice, speed: playedSpeed } = listenContextRef.current;
+      setSpeechRates((current) => {
+        const next = addSpeechSample(current, voice, sentence.text.length, seconds * playedSpeed);
+        saveSpeechRates(next);
+        return next;
+      });
+      recordListening({ ...listenContextRef.current, sentence, seconds });
+    },
     [recordListening],
   );
   const [markdownSource, setMarkdownSource] = useState("");
@@ -476,8 +493,8 @@ export default function App() {
   });
 
   useEffect(() => {
-    listenContextRef.current = { fileName, sentences, toc, speed };
-  }, [fileName, sentences, speed, toc]);
+    listenContextRef.current = { fileName, sentences, toc, speed, voice };
+  }, [fileName, sentences, speed, toc, voice]);
 
   const chapterStatus = useMemo(() => {
     const heard = (fileName && stats.heard[fileName]) || [];
@@ -574,7 +591,6 @@ export default function App() {
   );
 
   const now = new Date();
-  const todaySeconds = stats.days[dayKey(now)]?.seconds ?? 0;
   const streak = computeStreak(stats, now);
 
   const readingProgress = useMemo(
@@ -734,10 +750,8 @@ export default function App() {
         currentPlayablePosition={currentPlayablePosition}
         overallProgress={overallProgress}
         readingProgress={readingProgress}
-        todayGoalFraction={todaySeconds / goalSeconds(stats)}
-        todayMinutes={Math.floor(todaySeconds / 60)}
-        goalMinutes={stats.goalMinutes}
-        onOpenStats={() => setIsStatsOpen(true)}
+        charsPerSecond={charsPerSecond(speechRates, voice)}
+        isSpeechRateMeasured={isMeasured(speechRates, voice)}
         isMuted={isMuted}
         activeHeading={activeHeading}
         onPlayToggle={handlePlayToggle}

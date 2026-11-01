@@ -221,6 +221,11 @@ select {
   min-width: 0;
 }
 
+/* 좁아지면 파일 이름만 줄이고 오른쪽 버튼은 그대로 둔다. */
+.top-bar-right {
+  flex-shrink: 0;
+}
+
 .app-title {
   flex-shrink: 0;
   font-weight: 700;
@@ -256,9 +261,21 @@ select {
 .speed-button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 36px;
   padding: 0 12px;
+}
+
+.speed-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.speed-voice {
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.875rem;
 }
 
 /* ── 팝오버 (단축키, 설정) ─────────────────── */
@@ -734,18 +751,21 @@ kbd {
   opacity: 0;
 }
 
+/* [현재 제목] [재생 버튼: 가운데] [진행률 | 볼륨 | 속도·음성] */
 .player-inner {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 16px;
+  gap: 24px;
   height: 100%;
-  max-width: 1200px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 0 20px;
 }
 
 .player-section {
+  grid-row: 1;
+  grid-column: 1;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -771,11 +791,16 @@ kbd {
 }
 
 .player-section-empty {
+  overflow: hidden;
   color: var(--text-faint);
   font-size: 0.875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .player-buttons {
+  grid-row: 1;
+  grid-column: 2;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -799,21 +824,34 @@ kbd {
   background: var(--accent-strong);
 }
 
+/* 진행률 | 볼륨 | 속도·음성 세 묶음을 간격과 구분선으로 나눈다. */
 .player-extra {
+  grid-row: 1;
+  grid-column: 3;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 16px;
 }
 
-/* 전체·장 진행률을 두 줄로: 라벨 | 퍼센트 | 문장 위치 */
+.player-extra > * {
+  flex-shrink: 0;
+}
+
+.player-divider {
+  flex-shrink: 0;
+  width: 1px;
+  height: 28px;
+  background: var(--border);
+}
+
+/* 전체·장 진행률을 두 줄로: 라벨 | 퍼센트 | 문장 위치 | 남은 시간 */
 .progress-stats {
   display: grid;
-  grid-template-columns: auto auto auto;
+  grid-template-columns: auto auto auto auto;
   align-items: baseline;
-  column-gap: 12px;
-  row-gap: 2px;
-  margin-right: 10px;
+  column-gap: 14px;
+  row-gap: 3px;
   font-size: 1rem;
   font-variant-numeric: tabular-nums;
   line-height: 1.3;
@@ -837,6 +875,73 @@ kbd {
 
 .progress-count {
   color: var(--muted);
+  text-align: right;
+}
+
+/* 스피커 아이콘을 누르면 위로 열리는 세로 볼륨 막대 */
+.volume-popover {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-width: 56px;
+  padding: 12px 10px 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+  transform: translateX(-50%);
+}
+
+.volume-value {
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 전역 input[type="range"] { width: 100% }보다 우선하도록 부모 클래스를 붙인다. */
+.volume-popover .volume-slider {
+  --volume-progress: 50%;
+  /* 세로 모드에서는 inline-size가 길이, block-size가 두께 */
+  inline-size: 120px;
+  block-size: 6px;
+  margin: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    to top,
+    var(--accent) var(--volume-progress),
+    var(--border) var(--volume-progress)
+  );
+  appearance: none;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  cursor: pointer;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--surface);
+  appearance: none;
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.progress-remaining {
+  color: var(--muted);
+  font-size: 0.875rem;
   text-align: right;
 }
 
@@ -1101,14 +1206,6 @@ kbd {
 
 .level-text {
   color: var(--text-soft);
-}
-
-.goal-button {
-  display: inline-flex;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
 }
 
 .goal-ring {
@@ -1468,7 +1565,28 @@ kbd {
   }
 }
 
+/* 진행률·남은 시간·볼륨이 들어갈 자리를 만들려고, 좁아지면 현재 제목을 숨기고 버튼을 왼쪽으로 붙인다. */
+/* 오른쪽 묶음이 가운데 재생 버튼과 겹칠 만큼 좁아지면 재생 버튼을 왼쪽으로 붙인다. */
+@media (max-width: 1280px) {
+  .player-inner {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .player-buttons {
+    grid-column: 1;
+  }
+
+  .player-section {
+    grid-column: 2;
+  }
+}
+
 @media (max-width: 900px) {
+  .player-section,
+  .speed-voice {
+    display: none;
+  }
+
   .app-layout {
     display: block;
     padding: 16px 16px calc(var(--player-height) + 24px);
@@ -1505,9 +1623,17 @@ kbd {
   .save-state,
   .open-button span,
   .player-section,
-  .progress-count,
-  .goal-button {
+  .progress-count {
     display: none;
+  }
+
+  /* 문장 위치를 숨기므로 라벨 | 퍼센트 | 남은 시간 세 칸 */
+  .progress-stats {
+    grid-template-columns: auto auto auto;
+  }
+
+  .player-extra {
+    gap: 10px;
   }
 
   .file-name {
@@ -1730,4 +1856,50 @@ kbd {
 .quiz-footer .primary-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 휴대폰 폭: 정지 버튼과 "남음"을 빼서 한 줄에 맞춘다. */
+@media (max-width: 460px) {
+  .stop-button,
+  .progress-remaining-suffix,
+  .player-divider {
+    display: none;
+  }
+
+  .player-extra {
+    gap: 6px;
+  }
+
+  .player-inner {
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  .progress-stats {
+    column-gap: 8px;
+  }
+}
+
+/* 작은 휴대폰: 볼륨은 기기 버튼으로 조절하고, 상단 간격을 줄인다. */
+@media (max-width: 400px) {
+  .top-bar {
+    gap: 6px;
+    padding-inline: 10px;
+  }
+
+  .top-bar-right {
+    gap: 2px;
+  }
+
+  .top-bar-right .icon-button {
+    width: 32px;
+  }
+
+  .streak-chip {
+    padding: 0 8px;
+  }
+
+  .speed-button svg {
+    display: none;
+  }
 }

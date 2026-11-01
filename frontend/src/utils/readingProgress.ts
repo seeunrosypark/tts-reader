@@ -8,6 +8,9 @@ export type RangeProgress = {
   position: number;
   /** 구간 안의 읽는 문장 수 (건너뛰는 문장 제외). */
   count: number;
+  /** 구간 전체 글자 수와 아직 읽지 않은 글자 수 (현재 문장은 읽은 비율만큼 뺀다). */
+  totalChars: number;
+  remainingChars: number;
 };
 
 export type ChapterProgress = RangeProgress & { title: string | null };
@@ -87,16 +90,30 @@ function computeRangeProgress(
     (sentence) => !sentence.skip && sentence.index >= start && sentence.index < end,
   );
   if (playable.length === 0) {
-    return { progress: 0, position: 0, count: 0 };
+    return { progress: 0, position: 0, count: 0, totalChars: 0, remainingChars: 0 };
   }
 
   const done = playable.filter((sentence) => sentence.index < currentIndex).length;
   const isCurrentInRange = playable.some((sentence) => sentence.index === currentIndex);
   const progress = (done + (isCurrentInRange ? sentenceProgress : 0)) / playable.length;
+
+  let totalChars = 0;
+  let remainingChars = 0;
+  for (const sentence of playable) {
+    totalChars += sentence.text.length;
+    if (sentence.index > currentIndex) {
+      remainingChars += sentence.text.length;
+    } else if (sentence.index === currentIndex) {
+      remainingChars += sentence.text.length * (1 - Math.min(Math.max(sentenceProgress, 0), 1));
+    }
+  }
+
   return {
     progress: Math.min(Math.max(progress, 0), 1),
     position: done + (isCurrentInRange ? 1 : 0),
     count: playable.length,
+    totalChars,
+    remainingChars,
   };
 }
 

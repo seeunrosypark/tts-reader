@@ -33,17 +33,17 @@ describe("getChapterLevel", () => {
 
 describe("computeReadingProgress", () => {
   it("전체: 문서 전체에서의 비율과 문장 위치", () => {
-    expect(progressAt(0).overall).toEqual({ progress: 0, position: 1, count: 10 });
-    expect(progressAt(5).overall).toEqual({ progress: 0.5, position: 6, count: 10 });
+    expect(progressAt(0).overall).toMatchObject({ progress: 0, position: 1, count: 10 });
+    expect(progressAt(5).overall).toMatchObject({ progress: 0.5, position: 6, count: 10 });
     expect(progressAt(5, 0.5).overall.progress).toBeCloseTo(0.55);
   });
 
   it("장: 현재 장 안에서의 비율, 문장 위치, 장 제목을 함께 준다", () => {
     // 1장은 문장 2~5 (4문장)
-    expect(progressAt(2).chapter).toEqual({ progress: 0, position: 1, count: 4, title: "1장" });
-    expect(progressAt(4).chapter).toEqual({ progress: 0.5, position: 3, count: 4, title: "1장" });
+    expect(progressAt(2).chapter).toMatchObject({ progress: 0, position: 1, count: 4, title: "1장" });
+    expect(progressAt(4).chapter).toMatchObject({ progress: 0.5, position: 3, count: 4, title: "1장" });
     // 2장은 하위 절(2.1)까지 포함해 문장 6~9 (4문장)
-    expect(progressAt(8).chapter).toEqual({ progress: 0.5, position: 3, count: 4, title: "2장" });
+    expect(progressAt(8).chapter).toMatchObject({ progress: 0.5, position: 3, count: 4, title: "2장" });
   });
 
   it("전체와 장을 한 번에 계산한다", () => {
@@ -53,7 +53,7 @@ describe("computeReadingProgress", () => {
   });
 
   it("첫 장 앞의 머리말은 별도 구간이고 장 제목은 없다", () => {
-    expect(progressAt(1).chapter).toEqual({ progress: 0.5, position: 2, count: 2, title: null });
+    expect(progressAt(1).chapter).toMatchObject({ progress: 0.5, position: 2, count: 2, title: null });
   });
 
   it("건너뛰는 문장은 세지 않는다", () => {
@@ -70,7 +70,7 @@ describe("computeReadingProgress", () => {
   });
 
   it("문장이 없으면 0", () => {
-    expect(computeReadingProgress([], [], 0, 0).overall).toEqual({ progress: 0, position: 0, count: 0 });
+    expect(computeReadingProgress([], [], 0, 0).overall).toMatchObject({ progress: 0, position: 0, count: 0 });
   });
 });
 
@@ -86,5 +86,18 @@ describe("chapterText", () => {
     ];
     const text = chapterText({ id: "c1", title: "1장", start: 1, end: 5 }, chapterSentences);
     expect(text.split(String.fromCharCode(10))).toEqual(["1장", "본문 하나.", "본문 둘."]);
+  });
+});
+
+describe("남은 글자 수", () => {
+  // 문장마다 "문장 N." 5글자
+  it("현재 문장은 읽은 비율만큼 빼고, 뒤 문장은 모두 센다", () => {
+    const { overall, chapter } = progressAt(5, 0.4);
+    expect(overall).toMatchObject({ totalChars: 50, remainingChars: 23 });
+    expect(chapter).toMatchObject({ totalChars: 20, remainingChars: 3 });
+  });
+
+  it("장의 남은 글자는 그 장 안에서만 센다", () => {
+    expect(progressAt(4).chapter).toMatchObject({ remainingChars: 10 });
   });
 });
