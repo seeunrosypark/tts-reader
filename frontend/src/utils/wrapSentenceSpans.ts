@@ -1,11 +1,16 @@
 import type { Sentence } from "./sentenceSplitter";
 
-function collectTextNodes(root: HTMLElement): Text[] {
+/**
+ * 블록이 직접 가진 글자 노드. 코드 블록(pre)과, 안쪽에 있는 다른 블록(인용 안의 문단,
+ * 목록 안의 하위 목록 등)의 글자는 뺀다. 안쪽 블록은 따로 처리하므로 여기서 세면 두 번 읽는다.
+ * 인라인 code는 문장의 일부이므로 포함한다.
+ */
+function collectTextNodes(root: HTMLElement, blockSelector: string): Text[] {
   const nodes: Text[] = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const parent = node.parentElement;
-      if (parent?.closest("pre, code")) {
+      if (!parent || parent.closest("pre") || parent.closest(blockSelector) !== root) {
         return NodeFilter.FILTER_REJECT;
       }
       return node.textContent?.length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
@@ -58,13 +63,21 @@ function findSentenceStart(fullText: string, sentence: string, fromIndex: number
   return rawIndex;
 }
 
+/** 블록이 직접 가진 글자 (안쪽 블록 제외). */
+export function getOwnText(element: HTMLElement, blockSelector: string): string {
+  return collectTextNodes(element, blockSelector)
+    .map((node) => node.textContent ?? "")
+    .join("");
+}
+
 function wrapOffsetRange(
   root: HTMLElement,
+  blockSelector: string,
   start: number,
   end: number,
   sentenceIndex: number,
 ): void {
-  const textNodes = collectTextNodes(root);
+  const textNodes = collectTextNodes(root, blockSelector);
   const map = buildOffsetMap(textNodes);
 
   for (const entry of map) {
@@ -103,6 +116,7 @@ function wrapOffsetRange(
 export function wrapSentencesInElement(
   element: HTMLElement,
   sentences: Sentence[],
+  blockSelector: string,
 ): void {
   const playable = sentences.filter((sentence) => !sentence.skip);
   if (playable.length === 0) {
@@ -112,7 +126,7 @@ export function wrapSentencesInElement(
   let searchFrom = 0;
 
   for (const sentence of playable) {
-    const textNodes = collectTextNodes(element);
+    const textNodes = collectTextNodes(element, blockSelector);
     const fullText = textNodes.map((node) => node.textContent ?? "").join("");
     const start = findSentenceStart(fullText, sentence.text, searchFrom);
     if (start === -1) {
@@ -120,7 +134,7 @@ export function wrapSentencesInElement(
     }
 
     const end = start + sentence.text.length;
-    wrapOffsetRange(element, start, end, sentence.index);
+    wrapOffsetRange(element, blockSelector, start, end, sentence.index);
     searchFrom = end;
   }
 }

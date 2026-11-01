@@ -74,3 +74,70 @@ describe("findActiveTocItem", () => {
     expect(findActiveTocItem(toc, null)).toBeNull();
   });
 });
+
+describe("인용·중첩 블록", () => {
+  const playableTexts = (md: string) =>
+    parseLocalMarkdown(md)
+      .sentences.filter((sentence) => !sentence.skip)
+      .map((sentence) => sentence.text);
+
+  it("인용 박스는 한 번만 읽는다", () => {
+    expect(playableTexts("> 인용 문장이다. 둘째 문장.\n\n본문.")).toEqual([
+      "인용 문장이다.",
+      "둘째 문장.",
+      "본문.",
+    ]);
+  });
+
+  it("여러 문단짜리 인용과 인용 안 목록도 한 번씩", () => {
+    expect(playableTexts("> 첫 문단.\n>\n> 둘째 문단.\n>\n> - 목록 항목.")).toEqual([
+      "첫 문단.",
+      "둘째 문단.",
+      "목록 항목.",
+    ]);
+  });
+
+  it("중첩 목록은 바깥 항목 글자와 안쪽 항목을 따로 읽는다", () => {
+    expect(playableTexts("- 바깥 항목.\n  - 안쪽 항목.\n- 다음 항목.")).toEqual([
+      "바깥 항목.",
+      "안쪽 항목.",
+      "다음 항목.",
+    ]);
+  });
+});
+
+describe("하이라이트", () => {
+  // 읽는 문장마다 화면에 하이라이트용 span이 있어야 한다.
+  const unwrapped = (md: string) => {
+    const { html, sentences } = parseLocalMarkdown(md);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return sentences
+      .filter((sentence) => !sentence.skip && !doc.querySelector(`.sentence[data-index="${sentence.index}"]`))
+      .map((sentence) => sentence.text);
+  };
+
+  it.each([
+    ["인라인 코드로 시작", "`SELECT` 문으로 조회한다. 다음 문장."],
+    ["밑줄 있는 영어 단어", "snake_case_name 변수를 쓴다. 다음."],
+    ["곱셈 기호", "DAU = 3억 * 50% * 2. 다음."],
+    ["영어로 시작", "Redis는 인메모리 저장소다. Consistency is hard. 다음."],
+    ["특수문자로 시작", "\"따옴표\" (괄호) → 화살표 · 가운뎃점 100% 확실. 다음."],
+    ["인용 안 문장", "> `code` 로 시작하는 인용."],
+  ])("%s", (_name, md) => {
+    expect(unwrapped(md)).toEqual([]);
+  });
+
+  it("코드처럼 시작해도 한글 설명 문장은 읽고, 한글 없는 코드 줄은 건너뛴다", () => {
+    const { sentences } = parseLocalMarkdown("`db_set key value`를 호출하면 저장합니다.\n\ndb_set 42 abc");
+    // 코드 줄만 있는 문단은 문장 목록에서 아예 빠진다.
+    expect(sentences.map((sentence) => [sentence.text, Boolean(sentence.skip)])).toEqual([
+      ["db_set key value를 호출하면 저장합니다.", false],
+    ]);
+  });
+
+  it("인용 박스의 span은 문장마다 하나", () => {
+    const { html } = parseLocalMarkdown("> 인용 문장이다.");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    expect(doc.querySelectorAll(".sentence").length).toBe(1);
+  });
+});

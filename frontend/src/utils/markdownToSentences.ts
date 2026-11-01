@@ -2,7 +2,7 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 
 import { splitSentences, type Sentence } from "./sentenceSplitter";
-import { enhanceCodeBlocks, wrapSentencesInElement } from "./wrapSentenceSpans";
+import { enhanceCodeBlocks, getOwnText, wrapSentencesInElement } from "./wrapSentenceSpans";
 
 export type TocItem = {
   id: string;
@@ -11,9 +11,11 @@ export type TocItem = {
   sentenceIndex: number;
 };
 
-const SKIP_PATTERNS = [
-  /^Skip to Content$/i,
-  /translation-feedback@oreilly\.com/i,
+// 원문에서 복사돼 들어온 안내 문구: 항상 읽지 않는다.
+const ALWAYS_SKIP_PATTERNS = [/^Skip to Content$/i, /translation-feedback@oreilly\.com/i];
+
+// 본문에 섞인 코드 줄: 한글 설명 문장("`db_set key value`를 호출하면 …")은 읽어야 하므로 한글이 없을 때만 건너뛴다.
+const CODE_LINE_PATTERNS = [
   /^#!/,
   /^\$/,
   /^db_(set|get)/,
@@ -31,12 +33,17 @@ const SKIP_PATTERNS = [
 const BLOCK_SELECTORS =
   "p, h1, h2, h3, h4, h5, h6, li, blockquote, td, th";
 
+const HANGUL = /[가-힣]/;
+
 function shouldSkipText(text: string): boolean {
   const normalized = text.trim();
   if (!normalized) {
     return true;
   }
-  return SKIP_PATTERNS.some((pattern) => pattern.test(normalized));
+  if (ALWAYS_SKIP_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return true;
+  }
+  return !HANGUL.test(normalized) && CODE_LINE_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 function stripMarkdownInline(text: string): string {
@@ -58,8 +65,15 @@ function preprocessForTts(markdown: string): string {
   return withoutCodeBlocks.replace(/`[^`\n]+`/g, " ");
 }
 
+/** 화면에 그려진 글자는 마크다운 문법이 이미 처리됐으므로 공백만 정리한다. */
+function normalizeRenderedText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 function buildSentencesFromText(text: string, startIndex: number): Sentence[] {
-  const cleaned = stripMarkdownInline(text);
+  // 렌더링된 글자에 마크다운 제거를 다시 하면 "3억 * 50%"의 *나 snake_case의 _가 지워져
+  // 화면 글자와 달라지고, 그 문장은 하이라이트되지 않는다.
+  const cleaned = normalizeRenderedText(text);
   if (shouldSkipText(cleaned)) {
     return [];
   }
@@ -109,7 +123,7 @@ export function parseMarkdownToSentences(markdown: string): {
   let lastPlayableIndex: number | null = null;
 
   for (const block of blocks) {
-    const text = block.textContent ?? "";
+    const text = getOwnText(block as HTMLElement, BLOCK_SELECTORS);
     const blockSentences = buildSentencesFromText(text, nextIndex);
     const headingLevel = getHeadingLevel(block.tagName.toLowerCase());
 
@@ -124,7 +138,7 @@ export function parseMarkdownToSentences(markdown: string): {
       toc.push({
         id: headingId,
         level: headingLevel,
-        text: stripMarkdownInline(text),
+        text: normalizeRenderedText(text),
         sentenceIndex,
       });
     }
@@ -133,7 +147,7 @@ export function parseMarkdownToSentences(markdown: string): {
       continue;
     }
 
-    wrapSentencesInElement(block as HTMLElement, blockSentences);
+    wrapSentencesInElement(block as HTMLElement, blockSentences, BLOCK_SELECTORS);
     sentences.push(...blockSentences);
 
     const playable = firstPlayableIndex(blockSentences);
