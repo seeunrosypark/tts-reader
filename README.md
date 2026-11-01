@@ -78,6 +78,23 @@ npm run dev
 | Chrome / Edge | ✅ 처음 저장할 때 브라우저가 **쓰기 권한**을 한 번 묻습니다 |
 | Firefox / Safari | ❌ 화면에서만 바뀝니다 (상단 바에 "원본 미저장" 표시) |
 
+### 장 퀴즈 (AI)
+
+장을 정독했는지 4지선다 퀴즈로 확인합니다. 목차에서 장 제목에 마우스를 올리면 나오는 `퀴즈` 버튼이나, 장 완료 알림의 `퀴즈 풀기`로 엽니다.
+
+- 백엔드가 그 장의 본문을 Claude(`claude-opus-5-5`)에 보내 문제를 만듭니다. 장 하나에 보통 몇 센트가 듭니다.
+- 장마다 최고 점수가 목차에 표시되고, 처음 만점을 받으면 경험치 +40과 🧠 정독 인증 배지를 줍니다.
+- 같은 장을 다시 열면 페이지를 새로 고치기 전까지 만든 문제를 다시 씁니다. `새 문제 만들기`를 누르면 새로 만듭니다.
+
+Claude API 키가 필요합니다. 키는 백엔드에서만 쓰고 브라우저로 보내지 않습니다. 같은 터미널에서 키를 설정하고 서버를 켜세요.
+
+```powershell
+$env:ANTHROPIC_API_KEY="sk-ant-..."   # macOS/Linux: export ANTHROPIC_API_KEY=sk-ant-...
+npm run dev
+```
+
+키가 없으면 퀴즈 창에 안내가 나오고, 나머지 기능은 그대로 동작합니다.
+
 ---
 
 ## TTS 설정
@@ -100,22 +117,25 @@ npm run dev
 브라우저 (React + Vite, :5173)
    │  .md 파일은 브라우저에서 직접 열고 저장
    │
-   └─ /api (Vite proxy) ─→ FastAPI (:8000) ─→ edge-tts ─→ Microsoft TTS
+   └─ /api (Vite proxy) ─→ FastAPI (:8000) ─┬→ edge-tts ─→ Microsoft TTS
+                                           └→ Claude API (장 퀴즈)
 ```
 
 | API | 설명 |
 |-----|------|
 | `GET /api/voices?locale=ko-KR` | 음성 목록 |
 | `POST /api/tts` | 문장 → MP3 (`text`, `voice`, 선택 `rate`). 앱은 기본 속도로 합성하고 재생 속도는 브라우저에서 조절 |
+| `POST /api/quiz` | 장 본문 → 4지선다 퀴즈 JSON (`title`, `text`, 선택 `count` 3~10). `ANTHROPIC_API_KEY` 필요 |
 
 ```
 tts-reader/
-├── backend/                FastAPI + edge-tts
+├── backend/                FastAPI + edge-tts + Claude API
 │   ├── main.py
+│   ├── quiz_service.py
 │   └── tts_service.py
 ├── frontend/src/
 │   ├── App.tsx
-│   ├── api/ttsClient.ts
+│   ├── api/                ttsClient, quizClient
 │   ├── components/         TopBar, TableOfContents, MarkdownViewer, PlayerControls, SettingsPanel
 │   ├── hooks/              useTtsPlayer, useKeyboardShortcuts, useDismiss
 │   └── utils/              마크다운 파싱·문장 분리·파일 열기/저장

@@ -23,7 +23,11 @@ export type ReadingStats = {
   badges: Record<string, number>;
   /** 3배속 이상으로 끝까지 들은 문장 수 */
   fastSentences: number;
+  /** 파일 이름 → 장 제목 → 가장 좋은 퀴즈 결과 */
+  quizzes: Record<string, Record<string, QuizRecord>>;
 };
+
+export type QuizRecord = { best: number; total: number; at: number };
 
 export function emptyStats(): ReadingStats {
   return {
@@ -34,6 +38,7 @@ export function emptyStats(): ReadingStats {
     completedChapters: {},
     badges: {},
     fastSentences: 0,
+    quizzes: {},
   };
 }
 

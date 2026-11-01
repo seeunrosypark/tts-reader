@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TocItem } from "./markdownToSentences";
-import { computeReadingProgress, getChapterLevel } from "./readingProgress";
+import { chapterText, computeReadingProgress, getChapterLevel } from "./readingProgress";
 import type { Sentence } from "./sentenceSplitter";
 
 // 0: # 책   1: 머리말   2: ## 1장   3~5: 본문   6: ## 2장   7: ### 2.1   8~9: 본문
@@ -71,5 +71,20 @@ describe("computeReadingProgress", () => {
 
   it("문장이 없으면 0", () => {
     expect(computeReadingProgress([], [], 0, 0).overall).toEqual({ progress: 0, position: 0, count: 0 });
+  });
+});
+
+describe("chapterText", () => {
+  it("장 범위 안의 읽는 문장만 줄바꿈으로 잇는다", () => {
+    const chapterSentences: Sentence[] = [
+      { index: 0, text: "머리말." },
+      { index: 1, text: "1장" },
+      { index: 2, text: "본문 하나." },
+      { index: 3, text: "코드", skip: true },
+      { index: 4, text: "본문 둘." },
+      { index: 5, text: "2장" },
+    ];
+    const text = chapterText({ id: "c1", title: "1장", start: 1, end: 5 }, chapterSentences);
+    expect(text.split(String.fromCharCode(10))).toEqual(["1장", "본문 하나.", "본문 둘."]);
   });
 });

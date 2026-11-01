@@ -123,3 +123,11 @@ export function computeReadingProgress(
     },
   };
 }
+
+/** 장 본문을 읽는 문장만 이어 붙인 텍스트 (퀴즈 출제용). */
+export function chapterText(chapter: Chapter, sentences: Sentence[]): string {
+  return sentences
+    .filter((sentence) => !sentence.skip && sentence.index >= chapter.start && sentence.index < chapter.end)
+    .map((sentence) => sentence.text)
+    .join("\n");
+}

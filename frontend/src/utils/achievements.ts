@@ -64,7 +64,8 @@ export type Reward =
   | { type: "chapter-complete"; title: string }
   | { type: "book-complete"; fileName: string }
   | { type: "level-up"; level: number }
-  | { type: "badge"; badge: Badge };
+  | { type: "badge"; badge: Badge }
+  | { type: "quiz-perfect"; title: string };
 
 export type ListenEvent = {
   fileName: string | null;
@@ -179,5 +180,43 @@ export function applyListen(
   if (hour < 4) next = awardBadge(next, "night-owl", now, rewards);
   if (hour >= 5 && hour < 7) next = awardBadge(next, "early-bird", now, rewards);
 
+  return { stats: next, rewards };
+}
+
+export type QuizResult = {
+  fileName: string;
+  chapterTitle: string;
+  correct: number;
+  total: number;
+  now: Date;
+};
+
+/** 퀴즈 결과를 기록한다. 만점 보너스는 장마다 처음 만점일 때 한 번만 준다. */
+export function applyQuizResult(
+  stats: ReadingStats,
+  result: QuizResult,
+): { stats: ReadingStats; rewards: Reward[] } {
+  const { fileName, chapterTitle, correct, total, now } = result;
+  const rewards: Reward[] = [];
+  const fileQuizzes = stats.quizzes[fileName] ?? {};
+  const previous = fileQuizzes[chapterTitle];
+  const wasPerfect = previous !== undefined && previous.best === previous.total;
+
+  let next = stats;
+  if (!previous || correct / total >= previous.best / previous.total) {
+    next = {
+      ...next,
+      quizzes: {
+        ...next.quizzes,
+        [fileName]: { ...fileQuizzes, [chapterTitle]: { best: correct, total, at: now.getTime() } },
+      },
+    };
+  }
+
+  if (correct === total && !wasPerfect) {
+    rewards.push({ type: "quiz-perfect", title: chapterTitle });
+    next = addXp(next, XP.quizPerfect, rewards);
+    next = awardBadge(next, "quiz-perfect", now, rewards);
+  }
   return { stats: next, rewards };
 }

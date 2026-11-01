@@ -11,7 +11,12 @@ import { ChevronIcon } from "./icons";
 
 const TOC_SECTIONS_COLLAPSED_KEY = "tts-reader-toc-sections-collapsed";
 
-export type ChapterStatus = { coverage: number; isComplete: boolean };
+export type ChapterStatus = {
+  coverage: number;
+  isComplete: boolean;
+  /** 가장 좋은 퀴즈 결과 */
+  quiz?: { best: number; total: number };
+};
 
 type TableOfContentsProps = {
   toc: TocItem[];
@@ -20,6 +25,7 @@ type TableOfContentsProps = {
   /** 장 제목의 toc id → 들은 비율과 완료 여부 */
   chapterStatus: Record<string, ChapterStatus>;
   onNavigate: (item: TocItem) => void;
+  onStartQuiz: (tocId: string) => void;
 };
 
 function loadSectionsCollapsedState(): Set<string> {
@@ -49,6 +55,7 @@ type TocAccordionItemProps = {
   collapsedIds: Set<string>;
   onToggle: (id: string) => void;
   onNavigate: (item: TocItem) => void;
+  onStartQuiz: (tocId: string) => void;
 };
 
 function TocAccordionItem({
@@ -58,6 +65,7 @@ function TocAccordionItem({
   collapsedIds,
   onToggle,
   onNavigate,
+  onStartQuiz,
 }: TocAccordionItemProps) {
   const hasChildren = node.children.length > 0;
   const isSectionCollapsed = collapsedIds.has(node.item.id);
@@ -103,6 +111,21 @@ function TocAccordionItem({
             ✓
           </span>
         )}
+        {status && (
+          <button
+            type="button"
+            className={`toc-quiz-button${status.quiz && status.quiz.best === status.quiz.total ? " is-perfect" : ""}`}
+            title={
+              status.quiz
+                ? `퀴즈 최고 ${status.quiz.best}/${status.quiz.total} · 다시 풀기`
+                : "이 장 퀴즈 풀기"
+            }
+            aria-label={`${node.item.text} 퀴즈`}
+            onClick={() => onStartQuiz(node.item.id)}
+          >
+            {status.quiz ? `${status.quiz.best}/${status.quiz.total}` : "퀴즈"}
+          </button>
+        )}
       </div>
 
       {hasChildren && !isSectionCollapsed && (
@@ -116,6 +139,7 @@ function TocAccordionItem({
               collapsedIds={collapsedIds}
               onToggle={onToggle}
               onNavigate={onNavigate}
+              onStartQuiz={onStartQuiz}
             />
           ))}
         </ul>
@@ -130,6 +154,7 @@ export function TableOfContents({
   isOpen,
   chapterStatus,
   onNavigate,
+  onStartQuiz,
 }: TableOfContentsProps) {
   const listRef = useRef<HTMLUListElement>(null);
   const [collapsedSectionIds, setCollapsedSectionIds] = useState(
@@ -231,6 +256,7 @@ export function TableOfContents({
               collapsedIds={collapsedSectionIds}
               onToggle={toggleSection}
               onNavigate={onNavigate}
+              onStartQuiz={onStartQuiz}
             />
           ))}
         </ul>

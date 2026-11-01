@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyListen, levelFromXp, xpForLevel, type ListenEvent, type Reward } from "./achievements";
+import { applyListen, applyQuizResult, levelFromXp, xpForLevel, type ListenEvent, type Reward } from "./achievements";
 import type { TocItem } from "./markdownToSentences";
 import { emptyStats, type ReadingStats } from "./readingStats";
 import type { Sentence } from "./sentenceSplitter";
@@ -107,5 +107,29 @@ describe("applyListen", () => {
     const { stats } = listen(emptyStats(), 1, { fileName: null });
     expect(stats.heard).toEqual({});
     expect(stats.xp).toBe(1);
+  });
+});
+
+describe("applyQuizResult", () => {
+  const quiz = (stats: ReadingStats, correct: number) =>
+    applyQuizResult(stats, { fileName: "book.md", chapterTitle: "1장", correct, total: 5, now: noon });
+
+  it("가장 좋은 점수만 남긴다", () => {
+    const first = quiz(emptyStats(), 3).stats;
+    expect(quiz(first, 2).stats.quizzes["book.md"]["1장"].best).toBe(3);
+    expect(quiz(first, 4).stats.quizzes["book.md"]["1장"].best).toBe(4);
+  });
+
+  it("처음 만점이면 경험치와 정독 인증 배지, 두 번째 만점은 보상 없음", () => {
+    const perfect = quiz(emptyStats(), 5);
+    expect(types(perfect.rewards)).toEqual(expect.arrayContaining(["quiz-perfect", "badge:quiz-perfect"]));
+    expect(perfect.stats.xp).toBe(40);
+    const again = quiz(perfect.stats, 5);
+    expect(again.rewards).toEqual([]);
+    expect(again.stats.xp).toBe(40);
+  });
+
+  it("만점이 아니면 보상 없음", () => {
+    expect(quiz(emptyStats(), 4).rewards).toEqual([]);
   });
 });

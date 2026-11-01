@@ -7,16 +7,20 @@ export type Toast = {
   detail?: string;
   /** 목표 달성·장 완료처럼 큰 순간에는 색종이를 터뜨린다. */
   celebrate?: boolean;
+  action?: { label: string; onClick: () => void };
 };
 
 const TOAST_DURATION_MS = 4500;
+// 버튼이 있는 알림은 누를 시간을 넉넉히 준다.
+const ACTION_TOAST_DURATION_MS = 10000;
 const CONFETTI_COUNT = 14;
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number) => void }) {
   useEffect(() => {
-    const timer = window.setTimeout(() => onDismiss(toast.id), TOAST_DURATION_MS);
+    const duration = toast.action ? ACTION_TOAST_DURATION_MS : TOAST_DURATION_MS;
+    const timer = window.setTimeout(() => onDismiss(toast.id), duration);
     return () => window.clearTimeout(timer);
-  }, [onDismiss, toast.id]);
+  }, [onDismiss, toast.action, toast.id]);
 
   return (
     <div className="toast" role="status" onClick={() => onDismiss(toast.id)}>
@@ -34,6 +38,19 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number)
         <p className="toast-title">{toast.title}</p>
         {toast.detail && <p className="toast-detail">{toast.detail}</p>}
       </div>
+      {toast.action && (
+        <button
+          type="button"
+          className="toast-action"
+          onClick={(event) => {
+            event.stopPropagation();
+            toast.action!.onClick();
+            onDismiss(toast.id);
+          }}
+        >
+          {toast.action.label}
+        </button>
+      )}
     </div>
   );
 }

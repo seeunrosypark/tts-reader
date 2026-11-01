@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { generateQuiz, type Quiz } from "./api/quizClient";
 import { fetchVoices, type VoiceInfo } from "./api/ttsClient";
 import {
   MarkdownViewer,
   type MarkdownViewerHandle,
 } from "./components/MarkdownViewer";
 import { PlayerControls } from "./components/PlayerControls";
+import { QuizDialog, type QuizState } from "./components/QuizDialog";
 import { TableOfContents } from "./components/TableOfContents";
 import { RecentFileList } from "./components/RecentFileList";
 import { StatsDialog } from "./components/StatsDialog";
@@ -15,7 +17,7 @@ import { FileIcon } from "./components/icons";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useMediaSession } from "./hooks/useMediaSession";
 import { useReadingStats } from "./hooks/useReadingStats";
-import { chapterCoverage, levelFromXp, type Reward } from "./utils/achievements";
+import { applyQuizResult, chapterCoverage, levelFromXp, XP, type Reward } from "./utils/achievements";
 import { useTheme } from "./hooks/useTheme";
 import { useTtsPlayer } from "./hooks/useTtsPlayer";
 import { toggleBoldInMarkdown } from "./utils/markdownBold";
@@ -40,7 +42,7 @@ import {
   type OpenedMarkdown,
 } from "./utils/markdownFile";
 import { findReadingPosition, saveReadingPosition } from "./utils/readingPositions";
-import { computeReadingProgress, listChapters } from "./utils/readingProgress";
+import { chapterText, computeReadingProgress, listChapters, type Chapter } from "./utils/readingProgress";
 import { computeStreak, dayKey, goalSeconds } from "./utils/readingStats";
 import {
   addRecentFile,
@@ -58,6 +60,9 @@ const NARROW_SCREEN_QUERY = "(max-width: 900px)";
 const DEFAULT_VOICE = "ko-KR-SunHiNeural";
 const DEFAULT_SPEED = 2.0;
 const DEFAULT_VOLUME = 0.5;
+// 백엔드 /api/quiz가 받는 본문 길이와 맞춘다.
+const QUIZ_MIN_TEXT_LENGTH = 200;
+const QUIZ_MAX_TEXT_LENGTH = 200_000;
 
 function loadStoredVoice(): string {
   return localStorage.getItem(VOICE_STORAGE_KEY) ?? DEFAULT_VOICE;
@@ -106,6 +111,13 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const nextToastIdRef = useRef(0);
+  const [quizTarget, setQuizTarget] = useState<{ fileName: string; chapter: Chapter } | null>(null);
+  const [quizState, setQuizState] = useState<QuizState>({ status: "loading" });
+  // 같은 장을 다시 열 때 API를 또 부르지 않도록 이번 세션 동안 문제를 기억한다.
+  const quizCacheRef = useRef(new Map<string, Quiz>());
+  const quizAbortRef = useRef<AbortController | null>(null);
+  // 장 완료 알림에서 바로 퀴즈를 열 때 쓴다 (아래에서 채운다).
+  const openQuizByTitleRef = useRef<(title: string) => void>(() => {});
 
   const pushToast = useCallback((toast: Omit<Toast, "id">) => {
     const id = ++nextToastIdRef.current;
@@ -129,7 +141,13 @@ export default function App() {
           });
           break;
         case "chapter-complete":
-          pushToast({ icon: "🏆", title: `${reward.title} 완료!`, detail: "목차에 완료 도장을 찍었어요", celebrate: true });
+          pushToast({
+            icon: "🏆",
+            title: `${reward.title} 완료!`,
+            detail: "정독했는지 퀴즈로 확인해 볼까요?",
+            celebrate: true,
+            action: { label: "퀴즈 풀기", onClick: () => openQuizByTitleRef.current(reward.title) },
+          });
           break;
         case "book-complete":
           pushToast({ icon: "📚", title: "완독했습니다!", detail: reward.fileName, celebrate: true });
@@ -140,12 +158,15 @@ export default function App() {
         case "badge":
           pushToast({ icon: reward.badge.icon, title: `배지 획득: ${reward.badge.name}`, detail: reward.badge.description });
           break;
+        case "quiz-perfect":
+          pushToast({ icon: "🧠", title: `${reward.title} 퀴즈 만점!`, detail: `+${XP.quizPerfect} XP`, celebrate: true });
+          break;
       }
     },
     [pushToast],
   );
 
-  const { stats, recordListening, setGoalMinutes } = useReadingStats(handleReward);
+  const { stats, recordListening, applyChange, setGoalMinutes } = useReadingStats(handleReward);
   // 문장이 끝날 때 최신 파일·문장·목차·속도로 기록하도록 ref로 들고 있는다.
   const listenContextRef = useRef<{
     fileName: string | null;
@@ -461,16 +482,96 @@ export default function App() {
   const chapterStatus = useMemo(() => {
     const heard = (fileName && stats.heard[fileName]) || [];
     const completed = (fileName && stats.completedChapters[fileName]) || {};
+    const quizzes = (fileName && stats.quizzes[fileName]) || {};
     return Object.fromEntries(
       listChapters(toc).map((chapter) => [
         chapter.id,
         {
           coverage: chapterCoverage(chapter, sentences, heard),
           isComplete: Boolean(completed[chapter.title]),
+          quiz: quizzes[chapter.title],
         },
       ]),
     );
-  }, [fileName, sentences, stats.completedChapters, stats.heard, toc]);
+  }, [fileName, sentences, stats.completedChapters, stats.heard, stats.quizzes, toc]);
+
+  const loadQuiz = useCallback((target: { fileName: string; chapter: Chapter }, forceNew: boolean) => {
+    quizAbortRef.current?.abort();
+    const cacheKey = `${target.fileName}\n${target.chapter.title}`;
+    const cached = quizCacheRef.current.get(cacheKey);
+    if (cached && !forceNew) {
+      setQuizState({ status: "ready", quiz: cached });
+      return;
+    }
+
+    const text = chapterText(target.chapter, listenContextRef.current.sentences);
+    if (text.length < QUIZ_MIN_TEXT_LENGTH) {
+      setQuizState({ status: "error", message: "본문이 너무 짧아 퀴즈를 만들 수 없어요." });
+      return;
+    }
+    if (text.length > QUIZ_MAX_TEXT_LENGTH) {
+      setQuizState({ status: "error", message: "장이 너무 길어 한 번에 퀴즈를 만들 수 없어요." });
+      return;
+    }
+
+    const controller = new AbortController();
+    quizAbortRef.current = controller;
+    setQuizState({ status: "loading" });
+    generateQuiz(target.chapter.title, text, controller.signal)
+      .then((quiz) => {
+        quizCacheRef.current.set(cacheKey, quiz);
+        if (!controller.signal.aborted) {
+          setQuizState({ status: "ready", quiz });
+        }
+      })
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) {
+          setQuizState({ status: "error", message: err instanceof Error ? err.message : String(err) });
+        }
+      });
+  }, []);
+
+  const openQuiz = useCallback(
+    (chapter: Chapter | undefined) => {
+      if (!fileName || !chapter) {
+        return;
+      }
+      const target = { fileName, chapter };
+      setQuizTarget(target);
+      loadQuiz(target, false);
+    },
+    [fileName, loadQuiz],
+  );
+
+  const closeQuiz = useCallback(() => {
+    quizAbortRef.current?.abort();
+    setQuizTarget(null);
+  }, []);
+
+  useEffect(() => {
+    openQuizByTitleRef.current = (title) => openQuiz(listChapters(toc).find((chapter) => chapter.title === title));
+  }, [openQuiz, toc]);
+
+  // 다른 파일을 열면 이전 파일의 퀴즈는 닫는다.
+  useEffect(() => closeQuiz, [fileName, closeQuiz]);
+
+  const handleQuizSubmit = useCallback(
+    (correct: number, total: number) => {
+      if (!quizTarget) {
+        return;
+      }
+      applyChange((current) =>
+        applyQuizResult(current, {
+          fileName: quizTarget.fileName,
+          chapterTitle: quizTarget.chapter.title,
+          correct,
+          total,
+          now: new Date(),
+        }),
+      );
+    },
+    [applyChange, quizTarget],
+  );
 
   const now = new Date();
   const todaySeconds = stats.days[dayKey(now)]?.seconds ?? 0;
@@ -584,6 +685,7 @@ export default function App() {
           isOpen={isTocOpen && hasToc}
           chapterStatus={chapterStatus}
           onNavigate={handleTocNavigate}
+          onStartQuiz={(tocId) => openQuiz(listChapters(toc).find((chapter) => chapter.id === tocId))}
         />
 
         <main className="app-main">
@@ -654,6 +756,17 @@ export default function App() {
           stats={stats}
           onClose={() => setIsStatsOpen(false)}
           onGoalMinutesChange={setGoalMinutes}
+        />
+      )}
+
+      {quizTarget && (
+        <QuizDialog
+          chapterTitle={quizTarget.chapter.title}
+          state={quizState}
+          bestRecord={stats.quizzes[quizTarget.fileName]?.[quizTarget.chapter.title]}
+          onSubmit={handleQuizSubmit}
+          onRegenerate={() => loadQuiz(quizTarget, true)}
+          onClose={closeQuiz}
         />
       )}
 
